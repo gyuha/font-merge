@@ -25,6 +25,7 @@ class FontSelector(QGroupBox):
         super().__init__(title)
         self.font_path = None
         self.charset_checkboxes = {}
+        self.other_selector = None  # 반대편 FontSelector 참조
         self.init_ui()
 
     def init_ui(self):
@@ -44,6 +45,11 @@ class FontSelector(QGroupBox):
         # 폰트 프리뷰
         self.preview = FontPreview()
         layout.addWidget(self.preview)
+
+        # 기본 폰트 선택 체크박스
+        self.base_font_checkbox = QCheckBox("기본 폰트로 사용")
+        self.base_font_checkbox.stateChanged.connect(self._on_base_font_changed)
+        layout.addWidget(self.base_font_checkbox)
 
         # 문자셋 선택 영역
         self.charset_group = QGroupBox("문자셋 선택")
@@ -75,6 +81,17 @@ class FontSelector(QGroupBox):
             self.file_label.setText(f"선택된 파일: {os.path.basename(file_path)}")
             self.preview.update_preview(file_path)
             self.load_charset_options()
+
+            # 기본 폰트 설정 로직
+            if self.other_selector:
+                if not self.other_selector.has_font_selected():
+                    # 첫 번째로 폰트를 선택한 경우 기본 폰트로 설정
+                    self.base_font_checkbox.setChecked(True)
+                else:
+                    # 두 번째 폰트 선택 시, 둘 다 체크되어 있지 않으면 현재 폰트를 기본으로 설정
+                    if (not self.base_font_checkbox.isChecked() and 
+                        not self.other_selector.base_font_checkbox.isChecked()):
+                        self.base_font_checkbox.setChecked(True)
 
     def load_charset_options(self):
         """폰트의 문자셋 옵션 로드"""
@@ -158,3 +175,30 @@ class FontSelector(QGroupBox):
     def get_font_path(self):
         """선택된 폰트 파일 경로 반환"""
         return self.font_path
+
+    def set_other_selector(self, other_selector):
+        """반대편 FontSelector 설정"""
+        self.other_selector = other_selector
+
+    def _on_base_font_changed(self, state):
+        """기본 폰트 체크박스 상태 변경 시 호출"""
+        if not self.other_selector:
+            return
+
+        # 폰트가 2개 모두 선택된 경우에만 라디오 버튼 동작
+        if self.has_font_selected() and self.other_selector.has_font_selected():
+            if state == 2:  # 체크됨
+                # 반대편 체크 해제 (시그널 블록하여 무한 루프 방지)
+                self.other_selector.base_font_checkbox.blockSignals(True)
+                self.other_selector.base_font_checkbox.setChecked(False)
+                self.other_selector.base_font_checkbox.blockSignals(False)
+            else:  # 체크 해제 시도
+                # 라디오 버튼 동작: 항상 하나는 체크되어야 함
+                # 현재 체크박스를 다시 체크 (체크 해제 방지)
+                self.base_font_checkbox.blockSignals(True)
+                self.base_font_checkbox.setChecked(True)
+                self.base_font_checkbox.blockSignals(False)
+
+    def is_base_font(self):
+        """기본 폰트로 선택되었는지 확인"""
+        return self.base_font_checkbox.isChecked()

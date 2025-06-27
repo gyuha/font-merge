@@ -45,6 +45,10 @@ class FontMergeApp(QMainWindow):
         self.right_font = FontSelector("두 번째 폰트")
         font_layout.addWidget(self.right_font)
 
+        # 두 FontSelector를 서로 연결
+        self.left_font.set_other_selector(self.right_font)
+        self.right_font.set_other_selector(self.left_font)
+
         main_layout.addLayout(font_layout)
 
         # 하단 합치기 버튼
