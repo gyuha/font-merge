@@ -357,3 +357,133 @@ class FontMerger:
         for platform_id, encoding_id, language_id in platforms:
             name_table.setName(font_name, 16, platform_id, encoding_id, language_id)
             name_table.setName("Regular", 17, platform_id, encoding_id, language_id)
+        
+        # 한글 지원을 위한 추가 메타데이터 설정
+        self._update_font_metadata_for_korean(font)
+
+    def _update_font_metadata_for_korean(self, font):
+        """
+        VSCode에서 한글이 제대로 표시되도록 폰트 메타데이터 업데이트
+        
+        Args:
+            font: TTFont 객체
+        """
+        # OS/2 테이블 업데이트 (문자 집합 정보)
+        if 'OS/2' in font:
+            os2_table = font['OS/2']
+            
+            # Unicode Range 설정 (한글 지원 추가 - 기존 값 보존)
+            # Bit 28: Hangul Jamo (U+1100-U+11FF)  
+            # Bit 29: Hangul Syllables (U+AC00-U+D7AF)
+            # Bit 30: Hangul Compatibility Jamo (U+3130-U+318F)
+            if hasattr(os2_table, 'ulUnicodeRange1'):
+                # 기존 값에 한글 범위만 추가 (OR 연산으로 기존 비트 보존)
+                korean_ranges = (1 << 28) | (1 << 29) | (1 << 30)
+                os2_table.ulUnicodeRange1 |= korean_ranges
+            
+            # Unicode Range 2, 3, 4도 보존 (다른 언어 및 특수 문자 지원)
+            # 이 값들을 건드리지 않아야 합자 등이 유지됨
+            
+            # Code Page Range 설정 (한국어 지원 추가 - 기존 값 보존)  
+            # Bit 19: Korean (Wansung) - 949
+            if hasattr(os2_table, 'ulCodePageRange1'):
+                os2_table.ulCodePageRange1 |= (1 << 19)
+            
+            # Weight과 Width 설정 (VSCode 호환성)
+            if hasattr(os2_table, 'usWeightClass'):
+                if os2_table.usWeightClass == 0:
+                    os2_table.usWeightClass = 400  # Normal weight
+            
+            if hasattr(os2_table, 'usWidthClass'):
+                if os2_table.usWidthClass == 0:
+                    os2_table.usWidthClass = 5  # Medium width
+        
+        # cmap 테이블 확인 및 보강
+        if 'cmap' in font:
+            cmap_table = font['cmap']
+            
+            # Unicode BMP 서브테이블이 있는지 확인
+            has_unicode_bmp = False
+            for subtable in cmap_table.tables:
+                if (subtable.platformID == 3 and subtable.platEncID == 1) or \
+                   (subtable.platformID == 0 and subtable.platEncID == 3):
+                    has_unicode_bmp = True
+                    break
+            
+            # Unicode BMP 서브테이블이 없으면 경고 (하지만 기존 것을 유지)
+            if not has_unicode_bmp:
+                print("경고: Unicode BMP cmap 서브테이블을 찾을 수 없습니다. 한글 표시에 문제가 있을 수 있습니다.")
+        
+        # head 테이블 확인
+        if 'head' in font:
+            head_table = font['head']
+            # macStyle 설정 (Regular 폰트로 표시)
+            if hasattr(head_table, 'macStyle'):
+                head_table.macStyle = 0  # Regular style
+        
+        # 합자 지원 확인 및 디버그 정보
+        self._verify_ligature_support(font)
+
+    def _verify_ligature_support(self, font):
+        """
+        폰트의 합자 지원 여부를 확인하고 디버그 정보 출력
+        
+        Args:
+            font: TTFont 객체
+        """
+        print("=== 폰트 합자 지원 검증 ===")
+        
+        # GSUB 테이블 확인 (합자의 핵심)
+        if 'GSUB' in font:
+            print("✓ GSUB 테이블 존재")
+            gsub_table = font['GSUB']
+            
+            # 피처 리스트 확인
+            if hasattr(gsub_table.table, 'FeatureList') and gsub_table.table.FeatureList:
+                feature_tags = []
+                for feature_record in gsub_table.table.FeatureList.FeatureRecord:
+                    feature_tags.append(feature_record.FeatureTag)
+                
+                print(f"  피처 목록: {', '.join(feature_tags)}")
+                
+                # 일반적인 합자 피처 확인
+                ligature_features = ['liga', 'dlig', 'clig', 'rlig']
+                found_ligatures = [tag for tag in feature_tags if tag in ligature_features]
+                
+                if found_ligatures:
+                    print(f"✓ 합자 피처 발견: {', '.join(found_ligatures)}")
+                else:
+                    print("⚠ 표준 합자 피처(liga, dlig, clig, rlig)를 찾을 수 없습니다")
+            else:
+                print("⚠ GSUB 테이블에 FeatureList가 없습니다")
+        else:
+            print("⚠ GSUB 테이블이 없습니다 - 합자가 지원되지 않을 수 있습니다")
+        
+        # GPOS 테이블 확인 (위치 조정)
+        if 'GPOS' in font:
+            print("✓ GPOS 테이블 존재")
+        else:
+            print("⚠ GPOS 테이블이 없습니다")
+        
+        # cmap 테이블에서 일반적인 합자 글리프 확인
+        if 'cmap' in font:
+            cmap = font.getBestCmap()
+            if cmap:
+                # 일반적인 합자 문자들 확인
+                ligature_chars = [
+                    0x2192,  # →
+                    0x21D2,  # ⇒  
+                    0x2260,  # ≠
+                    0x2264,  # ≤
+                    0x2265,  # ≥
+                ]
+                
+                found_ligature_chars = []
+                for char_code in ligature_chars:
+                    if char_code in cmap:
+                        found_ligature_chars.append(f"U+{char_code:04X}")
+                
+                if found_ligature_chars:
+                    print(f"✓ 합자 관련 유니코드 문자 발견: {', '.join(found_ligature_chars)}")
+        
+        print("======================\n")
