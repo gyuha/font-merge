@@ -6,11 +6,14 @@ os.environ["QT_LOGGING_RULES"] = "*=false"
 
 from PyQt6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
@@ -50,6 +53,29 @@ class FontMergeApp(QMainWindow):
         self.right_font.set_other_selector(self.left_font)
 
         main_layout.addLayout(font_layout)
+
+        # 병합 옵션 선택 영역
+        merge_options_group = QGroupBox("병합 옵션")
+        merge_options_layout = QVBoxLayout()
+
+        self.merge_option_group = QButtonGroup()
+        
+        self.option_default = QRadioButton("기존 설정 사용 (호환되지 않으면 실패)")
+        self.option_unify_upm = QRadioButton("Units per em 통일 (더 큰 값으로)")
+        self.option_lenient = QRadioButton("관대한 병합 옵션 (강제 병합)")
+        
+        self.option_default.setChecked(True)  # 기본값
+        
+        self.merge_option_group.addButton(self.option_default, 0)
+        self.merge_option_group.addButton(self.option_unify_upm, 1)
+        self.merge_option_group.addButton(self.option_lenient, 2)
+        
+        merge_options_layout.addWidget(self.option_default)
+        merge_options_layout.addWidget(self.option_unify_upm)
+        merge_options_layout.addWidget(self.option_lenient)
+        
+        merge_options_group.setLayout(merge_options_layout)
+        main_layout.addWidget(merge_options_group)
 
         # 하단 합치기 버튼
         self.merge_button = QPushButton("폰트 합치기")
@@ -95,6 +121,8 @@ class FontMergeApp(QMainWindow):
                     QMessageBox.warning(self, "오류", error_msg)
                     return
 
+                # 선택된 병합 옵션 가져오기
+                merge_option = self.merge_option_group.checkedId()
                 # 폰트 병합 실행
                 success = merger.merge_fonts(
                     self.left_font.get_font_path(),
@@ -102,6 +130,7 @@ class FontMergeApp(QMainWindow):
                     self.right_font.get_font_path(),
                     right_charsets,
                     save_path,
+                    merge_option,
                 )
 
                 if success:
