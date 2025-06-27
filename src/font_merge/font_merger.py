@@ -123,6 +123,13 @@ class FontMerger:
             subsetter.options.recommended_glyphs = True
             subsetter.options.name_IDs = ["*"]
             subsetter.options.name_legacy = True
+            
+            # 합자(ligature) 및 OpenType 피처 보존 설정
+            subsetter.options.layout_features = ["*"]  # 모든 레이아웃 피처 유지
+            subsetter.options.layout_scripts = ["*"]   # 모든 스크립트 유지
+            subsetter.options.glyph_names = True       # 글리프 이름 유지
+            subsetter.options.legacy_kern = True       # 커닝 정보 유지
+            subsetter.options.hinting = True           # 힌팅 정보 유지
 
             # 서브셋 생성
             subsetter.populate(unicodes=unicodes)
@@ -164,6 +171,10 @@ class FontMerger:
         merger = Merger()
         if hasattr(merger, "duplicateGlyphsPerFont"):
             merger.duplicateGlyphsPerFont = True
+        
+        # OpenType 피처 보존 설정
+        merger.options.drop_tables = []  # 테이블 삭제 방지
+        
         return merger.merge([font1_path, font2_path])
 
     def _merge_with_upm_unification(self, font1_path, font2_path):
@@ -198,6 +209,10 @@ class FontMerger:
             merger = Merger()
             if hasattr(merger, "duplicateGlyphsPerFont"):
                 merger.duplicateGlyphsPerFont = True
+            
+            # OpenType 피처 보존 설정
+            merger.options.drop_tables = []  # 테이블 삭제 방지
+            
             return merger.merge([adjusted_font1_path, adjusted_font2_path])
         finally:
             os.unlink(adjusted_font1_path)
@@ -217,8 +232,8 @@ class FontMerger:
                 font1 = TTFont(font1_path)
                 font2 = TTFont(font2_path)
 
-                # 문제가 될 수 있는 테이블 제거
-                for table_name in ["DSIG", "GPOS", "GSUB"]:
+                # 디지털 서명만 제거 (GSUB, GPOS는 합자에 필요하므로 보존)
+                for table_name in ["DSIG"]:
                     if table_name in font1:
                         del font1[table_name]
                     if table_name in font2:
@@ -235,6 +250,8 @@ class FontMerger:
 
                 try:
                     merger = Merger()
+                    # OpenType 피처 보존 설정
+                    merger.options.drop_tables = []  # 테이블 삭제 방지
                     return merger.merge([simplified_font1_path, simplified_font2_path])
                 finally:
                     os.unlink(simplified_font1_path)
@@ -290,30 +307,53 @@ class FontMerger:
 
         name_table = font['name']
         
-        # 폰트 이름 관련 name ID들
-        # 1: Font Family name
-        # 4: Full font name
+        # 폰트 이름 관련 name ID들 - 모든 주요 이름 항목 포함
+        # 1: Font Family name (패밀리 이름)
+        # 2: Font Subfamily name (서브패밀리 이름, Regular 등)
+        # 3: Unique font identifier
+        # 4: Full font name (전체 이름)
         # 6: PostScript name
-        name_ids = [1, 4, 6]
+        # 16: Typographic Family name (선택적)
+        # 17: Typographic Subfamily name (선택적)
         
-        for name_id in name_ids:
-            # 기존 레코드 제거
-            name_table.removeNames(nameID=name_id)
+        # 기본 이름들은 모두 새 이름으로 설정
+        primary_name_ids = [1, 4, 6]
+        
+        # 먼저 모든 기존 이름 레코드를 확인하고 업데이트
+        for name_record in name_table.names[:]:  # 복사본으로 순회
+            if name_record.nameID in primary_name_ids:
+                # 기존 레코드 제거
+                name_table.names.remove(name_record)
+        
+        # 새로운 이름들 추가
+        platforms = [
+            (3, 1, 0x409),  # Windows, Unicode BMP, English US
+            (1, 0, 0),      # Macintosh, Roman, English
+        ]
+        
+        for platform_id, encoding_id, language_id in platforms:
+            # Font Family name (ID 1)
+            name_table.setName(font_name, 1, platform_id, encoding_id, language_id)
             
-            # 새로운 이름 추가 (영어, Windows)
-            name_table.setName(
-                font_name, 
-                name_id, 
-                3,  # Platform ID: Microsoft
-                1,  # Encoding ID: Unicode BMP
-                0x409  # Language ID: English (US)
-            )
+            # Full font name (ID 4) 
+            name_table.setName(font_name, 4, platform_id, encoding_id, language_id)
             
-            # 새로운 이름 추가 (영어, Mac)
-            name_table.setName(
-                font_name,
-                name_id,
-                1,  # Platform ID: Macintosh
-                0,  # Encoding ID: Roman
-                0   # Language ID: English
-            )
+            # PostScript name (ID 6) - 공백 제거하고 특수문자 처리
+            ps_name = font_name.replace(' ', '').replace('-', '')
+            name_table.setName(ps_name, 6, platform_id, encoding_id, language_id)
+            
+            # Unique identifier (ID 3) - 버전 정보 포함
+            unique_id = f"{font_name}: 2023"
+            name_table.setName(unique_id, 3, platform_id, encoding_id, language_id)
+        
+        # Typographic names도 설정 (있는 경우)
+        for name_record in name_table.names[:]:
+            if name_record.nameID == 16:  # Typographic Family name
+                name_table.names.remove(name_record)
+            elif name_record.nameID == 17:  # Typographic Subfamily name  
+                name_table.names.remove(name_record)
+        
+        # 새로운 Typographic names 추가
+        for platform_id, encoding_id, language_id in platforms:
+            name_table.setName(font_name, 16, platform_id, encoding_id, language_id)
+            name_table.setName("Regular", 17, platform_id, encoding_id, language_id)
