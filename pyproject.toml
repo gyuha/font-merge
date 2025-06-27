@@ -1,0 +1,11 @@
+[project]
+name = "font-merge"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fonttools>=4.58.4",
+    "pillow>=11.2.1",
+    "pyqt6>=6.9.1",
+]

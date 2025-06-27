@@ -1,0 +1,137 @@
+"""폰트 선택 위젯"""
+
+import os
+from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QPushButton, QLabel, 
+                            QCheckBox, QScrollArea, QWidget, QFileDialog, QMessageBox)
+from fontTools.ttLib import TTFont
+
+from .font_preview import FontPreview
+
+
+class FontSelector(QGroupBox):
+    """폰트 파일 선택 및 문자셋 선택을 제공하는 위젯"""
+    
+    def __init__(self, title):
+        super().__init__(title)
+        self.font_path = None
+        self.charset_checkboxes = {}
+        self.init_ui()
+
+    def init_ui(self):
+        """UI 초기화"""
+        layout = QVBoxLayout()
+        
+        # 파일 선택 버튼
+        self.select_button = QPushButton("폰트 파일 선택")
+        self.select_button.clicked.connect(self.select_font)
+        layout.addWidget(self.select_button)
+        
+        # 선택된 파일 경로 표시
+        self.file_label = QLabel("선택된 파일 없음")
+        self.file_label.setWordWrap(True)
+        layout.addWidget(self.file_label)
+        
+        # 폰트 프리뷰
+        self.preview = FontPreview()
+        layout.addWidget(self.preview)
+        
+        # 문자셋 선택 영역
+        self.charset_group = QGroupBox("문자셋 선택")
+        self.charset_layout = QVBoxLayout()
+        
+        # 스크롤 영역
+        scroll = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_widget.setLayout(self.charset_layout)
+        scroll.setWidget(scroll_widget)
+        scroll.setWidgetResizable(True)
+        scroll.setMaximumHeight(200)
+        
+        charset_main_layout = QVBoxLayout()
+        charset_main_layout.addWidget(scroll)
+        self.charset_group.setLayout(charset_main_layout)
+        layout.addWidget(self.charset_group)
+        
+        self.setLayout(layout)
+
+    def select_font(self):
+        """폰트 파일 선택"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "폰트 파일 선택", 
+            "", 
+            "Font Files (*.ttf *.otf *.woff *.woff2)"
+        )
+        
+        if file_path:
+            self.font_path = file_path
+            self.file_label.setText(f"선택된 파일: {os.path.basename(file_path)}")
+            self.preview.update_preview(file_path)
+            self.load_charset_options()
+
+    def load_charset_options(self):
+        """폰트의 문자셋 옵션 로드"""
+        # 기존 체크박스 제거
+        for i in reversed(range(self.charset_layout.count())):
+            widget = self.charset_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+        
+        self.charset_checkboxes.clear()
+        
+        if not self.font_path:
+            return
+            
+        try:
+            font = TTFont(self.font_path)
+            cmap = font.getBestCmap()
+            
+            # 문자셋 범위별로 분류
+            charset_ranges = self._get_charset_ranges()
+            
+            for range_name, (start, end) in charset_ranges.items():
+                available_chars = [chr(code) for code in range(start, end + 1) if code in cmap]
+                
+                checkbox = QCheckBox(f"{range_name} ({len(available_chars)}자)")
+                checkbox.setEnabled(len(available_chars) > 0)
+                checkbox.setChecked(len(available_chars) > 0)
+                
+                self.charset_checkboxes[range_name] = {
+                    'checkbox': checkbox,
+                    'chars': available_chars,
+                    'range': (start, end)
+                }
+                
+                self.charset_layout.addWidget(checkbox)
+                
+        except Exception as e:
+            QMessageBox.warning(self, "오류", f"폰트 파일을 읽는 중 오류가 발생했습니다: {str(e)}")
+
+    def _get_charset_ranges(self):
+        """문자셋 범위 정의"""
+        return {
+            "한글": (0xAC00, 0xD7AF),
+            "영문 대문자": (0x0041, 0x005A),
+            "영문 소문자": (0x0061, 0x007A),
+            "숫자": (0x0030, 0x0039),
+            "기본 기호": (0x0020, 0x007F),
+            "한글 자모": (0x1100, 0x11FF),
+            "한글 호환 자모": (0x3130, 0x318F),
+            "CJK 통합 한자": (0x4E00, 0x9FFF),
+        }
+
+    def get_selected_charsets(self):
+        """선택된 문자셋 반환"""
+        selected = {}
+        for range_name, data in self.charset_checkboxes.items():
+            if data['checkbox'].isChecked():
+                selected[range_name] = data['chars']
+        return selected
+
+    def has_font_selected(self):
+        """폰트가 선택되었는지 확인"""
+        return self.font_path is not None
+
+    def get_font_path(self):
+        """선택된 폰트 파일 경로 반환"""
+        return self.font_path
