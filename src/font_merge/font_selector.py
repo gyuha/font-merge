@@ -129,6 +129,18 @@ class FontSelector(QGroupBox):
             "한글 자모": (0x1100, 0x11FF),
             "한글 호환 자모": (0x3130, 0x318F),
             "CJK 통합 한자": (0x4E00, 0x9FFF),
+            "합자 (Ligatures)": (0xFB00, 0xFB4F),
+            "NerdFonts 아이콘": (0xE000, 0xF8FF),
+            "NerdFonts Symbols": (0xF0000, 0xFFFFD),
+            "Powerline": (0xE0A0, 0xE0A2),
+            "Powerline Extra": (0xE0B0, 0xE0B3),
+            "Font Awesome": (0xF000, 0xF2E0),
+            "Weather Icons": (0xF300, 0xF32F),
+            "Seti-UI": (0xE5FA, 0xE62B),
+            "Devicons": (0xE700, 0xE7C5),
+            "Font Linux": (0xF300, 0xF32F),
+            "Octicons": (0xF400, 0xF4A9),
+            "Material Design": (0xF500, 0xFD46),
         }
 
     def get_selected_charsets(self):
