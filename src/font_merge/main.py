@@ -144,9 +144,61 @@ class FontMergeApp(QMainWindow):
                 import traceback
                 error_details = traceback.format_exc()
                 print(f"폰트 합치기 오류 세부사항:\n{error_details}")
+                
+                # 현재 선택된 옵션에 따라 다른 안내 메시지 제공
+                current_option = self.merge_option_group.checkedId()
+                suggestion = self._get_merge_option_suggestion(current_option, str(e))
+                
                 QMessageBox.critical(
-                    self, "오류", f"폰트 합치기 중 오류가 발생했습니다: {str(e)}"
+                    self, 
+                    "폰트 병합 실패", 
+                    f"폰트 합치기 중 오류가 발생했습니다:\n\n{str(e)}\n\n{suggestion}"
                 )
+
+    def _get_merge_option_suggestion(self, current_option, error_message):
+        """현재 옵션과 오류 메시지에 따라 적절한 제안 제공"""
+        
+        # Units per em 관련 오류 감지
+        if "Expected all items to be equal" in error_message and "[" in error_message:
+            if current_option == 0:  # 기존 설정 사용
+                return ("💡 해결책: 두 폰트의 Units per em 값이 다릅니다.\n"
+                       "병합 옵션에서 'Units per em 통일'을 선택해보세요.")
+            elif current_option == 1:  # UPM 통일
+                return ("💡 해결책: UPM 통일로도 해결되지 않았습니다.\n"
+                       "'관대한 병합 옵션'을 시도해보세요.")
+        
+        # 일반적인 호환성 문제
+        if "merge" in error_message.lower() or "table" in error_message.lower():
+            if current_option == 0:  # 기존 설정 사용
+                return ("💡 해결책: 폰트 호환성 문제가 발생했습니다.\n"
+                       "병합 옵션에서 'Units per em 통일' 또는 '관대한 병합 옵션'을 시도해보세요.")
+            elif current_option == 1:  # UPM 통일
+                return ("💡 해결책: '관대한 병합 옵션'을 시도해보세요.\n"
+                       "이 옵션은 호환성 문제를 우회하여 강제로 병합합니다.")
+        
+        # 파일 경로 또는 권한 관련 오류
+        if "permission" in error_message.lower() or "access" in error_message.lower():
+            return ("💡 해결책: 파일 접근 권한 문제입니다.\n"
+                   "다른 위치에 저장하거나 파일이 사용 중이 아닌지 확인해보세요.")
+        
+        # 파일 형식 오류
+        if "format" in error_message.lower() or "invalid" in error_message.lower():
+            return ("💡 해결책: 폰트 파일 형식에 문제가 있을 수 있습니다.\n"
+                   "다른 폰트 파일을 시도하거나 파일이 손상되지 않았는지 확인해보세요.")
+        
+        # 기본 제안
+        if current_option == 0:
+            return ("💡 해결책: 다른 병합 옵션을 시도해보세요:\n"
+                   "• Units per em 통일: 폰트 크기 단위를 맞춤\n"
+                   "• 관대한 병합 옵션: 호환성 문제를 우회하여 강제 병합")
+        elif current_option == 1:
+            return ("💡 해결책: '관대한 병합 옵션'을 시도해보세요.\n"
+                   "이 옵션은 더 강력한 호환성 처리를 제공합니다.")
+        else:  # 관대한 옵션도 실패
+            return ("💡 해결책: 모든 병합 옵션이 실패했습니다.\n"
+                   "• 다른 폰트 파일을 시도해보세요\n"
+                   "• 선택한 문자셋을 줄여보세요\n"
+                   "• 폰트 파일이 손상되지 않았는지 확인해보세요")
 
 
 def main():
