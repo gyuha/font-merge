@@ -117,9 +117,10 @@ def create_dmg(app_path, dmg_name, dmg_path):
         # Create DMG from temp directory
         temp_dmg = temp_path / "temp.dmg"
         
-        # Calculate DMG size (app size + 50MB buffer)
+        # Calculate DMG size (app size + 20MB buffer)
         app_size = sum(f.stat().st_size for f in Path(app_dest).rglob('*') if f.is_file())
-        dmg_size = max(100, (app_size // 1024 // 1024) + 50)  # MB
+        dmg_size_mb = (app_size // 1024 // 1024) + 20  # MB
+        dmg_size = max(50, dmg_size_mb)  # 최소 50MB, 최대는 실제 크기 + 20MB
         
         # Create DMG
         cmd = [

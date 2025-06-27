@@ -16,8 +16,8 @@ def install_pyinstaller():
     try:
         import PyInstaller
     except ImportError:
-        print("Installing PyInstaller...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+        print("Installing PyInstaller with uv...")
+        subprocess.check_call(["uv", "add", "pyinstaller"])
 
 
 def build_windows():
@@ -25,7 +25,7 @@ def build_windows():
     print("Building Windows executable...")
 
     cmd = [
-        "pyinstaller",
+        "uv", "run", "pyinstaller",
         "--onefile",
         "--windowed",
         "--name",
@@ -49,7 +49,7 @@ def build_macos():
     print("Building macOS application...")
 
     cmd = [
-        "pyinstaller",
+        "uv", "run", "pyinstaller",
         "--onefile",
         "--windowed",
         "--name",

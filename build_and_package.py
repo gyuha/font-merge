@@ -167,7 +167,7 @@ def main():
     
     # Step 2: Create DMG installer (only if app build succeeded)
     if success:
-        if not run_script("create_dmg.py", "Creating DMG Installer"):
+        if not run_script("create_simple_dmg.py", "Creating DMG Installer"):
             success = False
     
     overall_duration = time.time() - overall_start

@@ -3,8 +3,8 @@
 import os
 from pathlib import Path
 
-# 프로젝트 루트 디렉토리
-project_root = Path(__file__).parent.absolute()
+# 프로젝트 루트 디렉토리 (spec 파일의 현재 디렉토리)
+project_root = Path(os.getcwd()).absolute()
 
 # 아이콘 파일 경로
 icon_path = project_root / 'icon.icns'
@@ -43,10 +43,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='FontMerge',
     debug=False,
     bootloader_ignore_signals=False,
@@ -60,11 +58,21 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(icon_path) if icon_path.exists() else None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='FontMerge',
 )
 
 app = BUNDLE(
-    exe,
+    coll,
     name='FontMerge.app',
     icon=str(icon_path) if icon_path.exists() else None,
     bundle_identifier='com.fontmerge.app',

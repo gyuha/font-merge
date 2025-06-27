@@ -16,7 +16,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .font_preview import FontPreview
+# PyInstaller에서도 작동하는 안전한 import
+try:
+    # 상대 import 시도
+    from .font_preview import FontPreview
+except (ImportError, ValueError):
+    # 절대 import 시도 (PyInstaller 환경)
+    from font_merge.font_preview import FontPreview
 
 
 class FontSelector(QGroupBox):
@@ -137,7 +143,9 @@ class FontSelector(QGroupBox):
                             chr(code) for code in range(start, end + 1) if code in cmap
                         ]
                         if ligature_glyphs:
-                            available_chars.extend([f"lig_{i}" for i in range(len(ligature_glyphs))])
+                            available_chars.extend(
+                                [f"lig_{i}" for i in range(len(ligature_glyphs))]
+                            )
                     else:
                         available_chars = [
                             chr(code) for code in range(start, end + 1) if code in cmap
@@ -269,26 +277,37 @@ class FontSelector(QGroupBox):
         ligature_glyphs = []
         try:
             # GSUB 테이블에서 합자 정보 확인
-            if 'GSUB' in font:
-                gsub = font['GSUB']
-                if hasattr(gsub, 'table') and hasattr(gsub.table, 'FeatureList'):
+            if "GSUB" in font:
+                gsub = font["GSUB"]
+                if hasattr(gsub, "table") and hasattr(gsub.table, "FeatureList"):
                     feature_list = gsub.table.FeatureList
-                    if hasattr(feature_list, 'FeatureRecord'):
+                    if hasattr(feature_list, "FeatureRecord"):
                         for feature_record in feature_list.FeatureRecord:
                             # 'liga' (Standard Ligatures) 기능 찾기
-                            if feature_record.FeatureTag == 'liga':
-                                ligature_glyphs.append(f"liga_feature")
-            
+                            if feature_record.FeatureTag == "liga":
+                                ligature_glyphs.append("liga_feature")
+
             # 글리프 이름에서 합자 패턴 찾기
-            if hasattr(font, 'getGlyphSet'):
+            if hasattr(font, "getGlyphSet"):
                 glyph_set = font.getGlyphSet()
                 for glyph_name in glyph_set.keys():
                     # 일반적인 합자 글리프 이름 패턴
-                    if any(pattern in glyph_name.lower() for pattern in
-                           ['liga', 'fi', 'fl', 'ff', 'ffi', 'ffl', 'arrow', 'equal']):
+                    if any(
+                        pattern in glyph_name.lower()
+                        for pattern in [
+                            "liga",
+                            "fi",
+                            "fl",
+                            "ff",
+                            "ffi",
+                            "ffl",
+                            "arrow",
+                            "equal",
+                        ]
+                    ):
                         ligature_glyphs.append(glyph_name)
-                        
+
         except Exception:
             pass  # 오류 시 빈 리스트 반환
-            
+
         return ligature_glyphs

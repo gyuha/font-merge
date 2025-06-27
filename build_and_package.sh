@@ -69,7 +69,7 @@ echo "=================================================="
 echo "🚀 Creating DMG Installer" 
 echo "=================================================="
 
-if python3 create_dmg.py; then
+if python3 create_simple_dmg.py; then
     echo "✅ DMG creation completed"
 else
     echo "❌ DMG creation failed"

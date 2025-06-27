@@ -17,8 +17,8 @@ def check_dependencies():
         import PyInstaller
         print("✓ PyInstaller found")
     except ImportError:
-        print("Installing PyInstaller...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+        print("Installing PyInstaller with uv...")
+        subprocess.check_call(["uv", "add", "pyinstaller"])
         print("✓ PyInstaller installed")
 
 
@@ -55,7 +55,7 @@ def build_app():
         return False
     
     try:
-        cmd = ["pyinstaller", "--clean", spec_file]
+        cmd = ["uv", "run", "pyinstaller", "--clean", spec_file]
         subprocess.check_call(cmd)
         print("✅ App bundle build completed!")
         return True

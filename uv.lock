@@ -18,6 +18,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fonttools" },
     { name = "pillow" },
+    { name = "pyinstaller" },
     { name = "pyqt6" },
 ]
 
@@ -35,6 +36,7 @@ dev = [
 requires-dist = [
     { name = "fonttools", specifier = ">=4.58.4" },
     { name = "pillow", specifier = ">=11.2.1" },
+    { name = "pyinstaller", specifier = ">=6.14.1" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.0.0" },
     { name = "pyqt6", specifier = ">=6.9.1" },
 ]

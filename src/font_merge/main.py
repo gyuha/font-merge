@@ -4,6 +4,7 @@ import sys
 # Qt 디버그 로그 억제
 os.environ["QT_LOGGING_RULES"] = "*=false"
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -18,10 +19,16 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtGui import QIcon
 
-from .font_merger import FontMerger
-from .font_selector import FontSelector
+# PyInstaller에서도 작동하는 안전한 import
+try:
+    # 상대 import 시도
+    from .font_merger import FontMerger
+    from .font_selector import FontSelector
+except (ImportError, ValueError):
+    # 절대 import 시도 (PyInstaller 환경)
+    from font_merge.font_merger import FontMerger
+    from font_merge.font_selector import FontSelector
 
 
 class FontMergeApp(QMainWindow):
@@ -32,9 +39,11 @@ class FontMergeApp(QMainWindow):
     def init_ui(self):
         self.setWindowTitle("Font Merge - 폰트 합치기")
         self.setGeometry(100, 100, 1000, 700)
-        
+
         # 아이콘 설정
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'icon.png')
+        icon_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "..", "icon.png"
+        )
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -267,12 +276,14 @@ class FontMergeApp(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    
+
     # 애플리케이션 아이콘 설정
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'icon.png')
+    icon_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "icon.png"
+    )
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
-    
+
     window = FontMergeApp()
     window.show()
     sys.exit(app.exec())
