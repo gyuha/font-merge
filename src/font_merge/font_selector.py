@@ -47,6 +47,7 @@ class FontSelector(QGroupBox):
 
         # 문자셋 선택 영역
         self.charset_group = QGroupBox("문자셋 선택")
+        self.charset_group.setMinimumHeight(250)
         self.charset_layout = QVBoxLayout()
 
         # 스크롤 영역
@@ -55,7 +56,6 @@ class FontSelector(QGroupBox):
         scroll_widget.setLayout(self.charset_layout)
         scroll.setWidget(scroll_widget)
         scroll.setWidgetResizable(True)
-        scroll.setMaximumHeight(200)
 
         charset_main_layout = QVBoxLayout()
         charset_main_layout.addWidget(scroll)
