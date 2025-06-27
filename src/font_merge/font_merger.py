@@ -2,9 +2,9 @@
 
 import os
 
-from fontTools.merge import Merger  # type: ignore
-from fontTools.subset import Subsetter  # type: ignore
-from fontTools.ttLib import TTFont  # type: ignore
+from fontTools.merge import Merger
+from fontTools.subset import Subsetter
+from fontTools.ttLib import TTFont
 
 
 class FontMerger:
@@ -30,8 +30,6 @@ class FontMerger:
             bool: 성공 여부
         """
         try:
-            import tempfile
-            
             # 첫 번째 폰트에서 선택된 문자들만 추출
             font1_subset = self._create_font_subset(font1_path, font1_charsets)
             if not font1_subset:
@@ -42,31 +40,16 @@ class FontMerger:
             if not font2_subset:
                 raise Exception("두 번째 폰트에서 문자셋을 추출할 수 없습니다.")
 
-            # 임시 파일로 서브셋 저장
-            with tempfile.NamedTemporaryFile(suffix='.ttf', delete=False) as temp1:
-                font1_subset.save(temp1.name)
-                temp1_path = temp1.name
-                
-            with tempfile.NamedTemporaryFile(suffix='.ttf', delete=False) as temp2:
-                font2_subset.save(temp2.name)
-                temp2_path = temp2.name
+            # 두 폰트 병합
+            merged_font = self._merge_font_subsets(font1_subset, font2_subset)
 
-            try:
-                # 두 폰트 병합 (파일 경로 사용)
-                merged_font = self._merge_font_files(temp1_path, temp2_path)
-
-                # 결과 저장
-                merged_font.save(output_path)
-                
-            finally:
-                # 임시 파일 정리
-                os.unlink(temp1_path)
-                os.unlink(temp2_path)
+            # 결과 저장
+            merged_font.save(output_path)
 
             return True
 
         except Exception as e:
-            raise Exception(f"폰트 병합 중 오류 발생: {str(e)}") from e
+            raise Exception(f"폰트 병합 중 오류 발생: {str(e)}")
 
     def _create_font_subset(self, font_path, selected_charsets):
         """
@@ -111,15 +94,15 @@ class FontMerger:
             return font
 
         except Exception as e:
-            raise Exception(f"폰트 서브셋 생성 중 오류: {str(e)}") from e
+            raise Exception(f"폰트 서브셋 생성 중 오류: {str(e)}")
 
-    def _merge_font_files(self, font1_path, font2_path):
+    def _merge_font_subsets(self, font1, font2):
         """
-        두 폰트 파일을 병합
+        두 폰트 서브셋을 병합
 
         Args:
-            font1_path: 첫 번째 폰트 파일 경로
-            font2_path: 두 번째 폰트 파일 경로
+            font1: 첫 번째 폰트 객체
+            font2: 두 번째 폰트 객체
 
         Returns:
             TTFont: 병합된 폰트 객체
@@ -128,19 +111,16 @@ class FontMerger:
             # fontTools.merge.Merger를 사용하여 병합
             merger = Merger()
 
-            # 병합 옵션 설정 (속성 존재 여부 확인)
-            if hasattr(merger, "duplicateGlyphsPerFont"):
-                merger.duplicateGlyphsPerFont = True
+            # 병합 옵션 설정
+            merger.duplicateGlyphsPerFont = True
 
-            # 폰트 병합 수행 (파일 경로 전달)
-            merged_font = merger.merge([font1_path, font2_path])
+            # 폰트 병합 수행
+            merged_font = merger.merge([font1, font2])
 
             return merged_font
 
         except Exception as e:
-            import traceback
-            print(f"폰트 병합 세부 오류:\n{traceback.format_exc()}")
-            raise Exception(f"폰트 병합 중 오류: {str(e)}") from e
+            raise Exception(f"폰트 병합 중 오류: {str(e)}")
 
     def validate_fonts(self, font1_path, font2_path):
         """

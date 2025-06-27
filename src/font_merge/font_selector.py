@@ -89,8 +89,10 @@ class FontSelector(QGroupBox):
                     self.base_font_checkbox.setChecked(True)
                 else:
                     # 두 번째 폰트 선택 시, 둘 다 체크되어 있지 않으면 현재 폰트를 기본으로 설정
-                    if (not self.base_font_checkbox.isChecked() and 
-                        not self.other_selector.base_font_checkbox.isChecked()):
+                    if (
+                        not self.base_font_checkbox.isChecked()
+                        and not self.other_selector.base_font_checkbox.isChecked()
+                    ):
                         self.base_font_checkbox.setChecked(True)
 
     def load_charset_options(self):
@@ -143,21 +145,36 @@ class FontSelector(QGroupBox):
             "영문 소문자": (0x0061, 0x007A),
             "숫자": (0x0030, 0x0039),
             "기본 기호": (0x0020, 0x007F),
+            "라틴 확장 A": (0x0100, 0x017F),
+            "라틴 확장 B": (0x0180, 0x024F),
+            "일반 구두점": (0x2000, 0x206F),
+            "위 첨자/아래 첨자": (0x2070, 0x209F),
+            "통화 기호": (0x20A0, 0x20CF),
             "한글 자모": (0x1100, 0x11FF),
             "한글 호환 자모": (0x3130, 0x318F),
+            "한글 반자모": (0xFFA0, 0xFFDC),
+            "CJK 기호": (0x3000, 0x303F),
+            "히라가나": (0x3040, 0x309F),
+            "가타카나": (0x30A0, 0x30FF),
             "CJK 통합 한자": (0x4E00, 0x9FFF),
+            "CJK 확장 A": (0x3400, 0x4DBF),
             "합자 (Ligatures)": (0xFB00, 0xFB4F),
+            "수학 기호": (0x2200, 0x22FF),
+            "화살표": (0x2190, 0x21FF),
+            "박스 그리기": (0x2500, 0x257F),
+            "블록 요소": (0x2580, 0x259F),
+            "기하학적 도형": (0x25A0, 0x25FF),
             "NerdFonts 아이콘": (0xE000, 0xF8FF),
-            "NerdFonts Symbols": (0xF0000, 0xFFFFD),
             "Powerline": (0xE0A0, 0xE0A2),
             "Powerline Extra": (0xE0B0, 0xE0B3),
             "Font Awesome": (0xF000, 0xF2E0),
             "Weather Icons": (0xF300, 0xF32F),
             "Seti-UI": (0xE5FA, 0xE62B),
             "Devicons": (0xE700, 0xE7C5),
-            "Font Linux": (0xF300, 0xF32F),
             "Octicons": (0xF400, 0xF4A9),
             "Material Design": (0xF500, 0xFD46),
+            "Codicons": (0xEA60, 0xEBEB),
+            "Pomicons": (0xE000, 0xE00D),
         }
 
     def get_selected_charsets(self):
