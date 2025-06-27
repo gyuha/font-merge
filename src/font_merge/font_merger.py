@@ -69,6 +69,9 @@ class FontMerger:
                 if font_name:
                     self._update_font_name(merged_font, font_name)
 
+                # 합자 지원 복원 (병합 후 처리)
+                self._restore_ligature_support(merged_font, temp1_path, temp2_path)
+
                 # 결과 저장
                 merged_font.save(output_path)
             finally:
@@ -487,3 +490,138 @@ class FontMerger:
                     print(f"✓ 합자 관련 유니코드 문자 발견: {', '.join(found_ligature_chars)}")
         
         print("======================\n")
+
+    def _restore_ligature_support(self, merged_font, font1_path, font2_path):
+        """
+        병합된 폰트에서 합자 지원을 복원
+        
+        Args:
+            merged_font: 병합된 TTFont 객체
+            font1_path: 첫 번째 폰트 경로 (보통 영문 폰트)
+            font2_path: 두 번째 폰트 경로 (보통 한글 폰트)
+        """
+        print("=== 합자 지원 복원 시작 ===")
+        
+        # 원본 영문 폰트에서 합자 정보 추출
+        font1 = TTFont(font1_path)
+        font2 = TTFont(font2_path)
+        
+        # 어느 폰트에 liga 피처가 있는지 확인
+        liga_source_font = None
+        liga_source_name = None
+        
+        for font, name in [(font1, "첫 번째 폰트"), (font2, "두 번째 폰트")]:
+            if 'GSUB' in font:
+                gsub_table = font['GSUB']
+                if hasattr(gsub_table.table, 'FeatureList') and gsub_table.table.FeatureList:
+                    for feature_record in gsub_table.table.FeatureList.FeatureRecord:
+                        if feature_record.FeatureTag == 'liga':
+                            liga_source_font = font
+                            liga_source_name = name
+                            print(f"✓ {name}에서 liga 피처 발견")
+                            break
+            if liga_source_font:
+                break
+        
+        if not liga_source_font:
+            print("⚠ liga 피처를 가진 원본 폰트를 찾을 수 없습니다")
+            return
+        
+        # 병합된 폰트의 GSUB 테이블 수정
+        if 'GSUB' not in merged_font:
+            print("⚠ 병합된 폰트에 GSUB 테이블이 없습니다")
+            return
+        
+        # liga 피처가 없는 경우 추가
+        merged_gsub = merged_font['GSUB']
+        source_gsub = liga_source_font['GSUB']
+        
+        if hasattr(merged_gsub.table, 'FeatureList') and merged_gsub.table.FeatureList:
+            # 기존 피처 목록에서 liga 확인
+            has_liga = False
+            for feature_record in merged_gsub.table.FeatureList.FeatureRecord:
+                if feature_record.FeatureTag == 'liga':
+                    has_liga = True
+                    break
+            
+            if not has_liga:
+                print("liga 피처가 누락됨 - 원본에서 복사 시도")
+                self._copy_liga_feature(merged_gsub, source_gsub)
+            else:
+                print("✓ liga 피처가 이미 존재함")
+        
+        # 피처 중복 제거
+        self._deduplicate_features(merged_gsub)
+        
+        print("=== 합자 지원 복원 완료 ===\n")
+
+    def _copy_liga_feature(self, target_gsub, source_gsub):
+        """
+        원본 폰트에서 liga 피처를 대상 폰트로 복사
+        """
+        try:
+            if not (hasattr(source_gsub.table, 'FeatureList') and source_gsub.table.FeatureList):
+                return
+            
+            # 원본에서 liga 피처 찾기
+            liga_feature = None
+            liga_index = None
+            
+            for i, feature_record in enumerate(source_gsub.table.FeatureList.FeatureRecord):
+                if feature_record.FeatureTag == 'liga':
+                    liga_feature = source_gsub.table.FeatureList.Feature[i]
+                    liga_index = i
+                    break
+            
+            if liga_feature and hasattr(target_gsub.table, 'FeatureList'):
+                # 대상 폰트에 liga 피처 추가
+                from fontTools.otlLib.builder import Builder
+                from fontTools.feaLib.builder import addOpenTypeFeatures
+                
+                # 간단한 방법: liga 피처 레코드만 추가
+                target_feature_list = target_gsub.table.FeatureList
+                
+                # FeatureRecord 추가
+                from fontTools.ttLib.tables.otTables import FeatureRecord
+                new_feature_record = FeatureRecord()
+                new_feature_record.FeatureTag = 'liga'
+                
+                # Feature 리스트에 추가
+                target_feature_list.FeatureRecord.append(new_feature_record)
+                target_feature_list.Feature.append(liga_feature)
+                target_feature_list.FeatureCount += 1
+                
+                print("✓ liga 피처를 성공적으로 추가했습니다")
+                
+        except Exception as e:
+            print(f"⚠ liga 피처 복사 중 오류: {str(e)}")
+
+    def _deduplicate_features(self, gsub_table):
+        """
+        GSUB 테이블에서 중복된 피처 제거
+        """
+        if not (hasattr(gsub_table.table, 'FeatureList') and gsub_table.table.FeatureList):
+            return
+        
+        feature_list = gsub_table.table.FeatureList
+        seen_features = set()
+        new_feature_records = []
+        new_features = []
+        
+        print("피처 중복 제거 시작...")
+        original_count = len(feature_list.FeatureRecord)
+        
+        for i, feature_record in enumerate(feature_list.FeatureRecord):
+            feature_tag = feature_record.FeatureTag
+            if feature_tag not in seen_features:
+                seen_features.add(feature_tag)
+                new_feature_records.append(feature_record)
+                new_features.append(feature_list.Feature[i])
+        
+        # 업데이트
+        feature_list.FeatureRecord = new_feature_records
+        feature_list.Feature = new_features
+        feature_list.FeatureCount = len(new_feature_records)
+        
+        removed_count = original_count - len(new_feature_records)
+        print(f"✓ {removed_count}개의 중복 피처를 제거했습니다 ({original_count} -> {len(new_feature_records)})")
