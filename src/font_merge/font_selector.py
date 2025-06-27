@@ -1,16 +1,26 @@
 """폰트 선택 위젯"""
 
 import os
-from PyQt6.QtWidgets import (QGroupBox, QVBoxLayout, QPushButton, QLabel, 
-                            QCheckBox, QScrollArea, QWidget, QFileDialog, QMessageBox)
+
 from fontTools.ttLib import TTFont
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QFileDialog,
+    QGroupBox,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .font_preview import FontPreview
 
 
 class FontSelector(QGroupBox):
     """폰트 파일 선택 및 문자셋 선택을 제공하는 위젯"""
-    
+
     def __init__(self, title):
         super().__init__(title)
         self.font_path = None
@@ -20,25 +30,25 @@ class FontSelector(QGroupBox):
     def init_ui(self):
         """UI 초기화"""
         layout = QVBoxLayout()
-        
+
         # 파일 선택 버튼
         self.select_button = QPushButton("폰트 파일 선택")
         self.select_button.clicked.connect(self.select_font)
         layout.addWidget(self.select_button)
-        
+
         # 선택된 파일 경로 표시
         self.file_label = QLabel("선택된 파일 없음")
         self.file_label.setWordWrap(True)
         layout.addWidget(self.file_label)
-        
+
         # 폰트 프리뷰
         self.preview = FontPreview()
         layout.addWidget(self.preview)
-        
+
         # 문자셋 선택 영역
         self.charset_group = QGroupBox("문자셋 선택")
         self.charset_layout = QVBoxLayout()
-        
+
         # 스크롤 영역
         scroll = QScrollArea()
         scroll_widget = QWidget()
@@ -46,23 +56,20 @@ class FontSelector(QGroupBox):
         scroll.setWidget(scroll_widget)
         scroll.setWidgetResizable(True)
         scroll.setMaximumHeight(200)
-        
+
         charset_main_layout = QVBoxLayout()
         charset_main_layout.addWidget(scroll)
         self.charset_group.setLayout(charset_main_layout)
         layout.addWidget(self.charset_group)
-        
+
         self.setLayout(layout)
 
     def select_font(self):
         """폰트 파일 선택"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, 
-            "폰트 파일 선택", 
-            "", 
-            "Font Files (*.ttf *.otf *.woff *.woff2)"
+            self, "폰트 파일 선택", "", "Font Files (*.ttf *.otf *.woff *.woff2)"
         )
-        
+
         if file_path:
             self.font_path = file_path
             self.file_label.setText(f"선택된 파일: {os.path.basename(file_path)}")
@@ -76,36 +83,40 @@ class FontSelector(QGroupBox):
             widget = self.charset_layout.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
-        
+
         self.charset_checkboxes.clear()
-        
+
         if not self.font_path:
             return
-            
+
         try:
             font = TTFont(self.font_path)
             cmap = font.getBestCmap()
-            
+
             # 문자셋 범위별로 분류
             charset_ranges = self._get_charset_ranges()
-            
+
             for range_name, (start, end) in charset_ranges.items():
-                available_chars = [chr(code) for code in range(start, end + 1) if code in cmap]
-                
+                available_chars = [
+                    chr(code) for code in range(start, end + 1) if code in cmap
+                ]
+
                 checkbox = QCheckBox(f"{range_name} ({len(available_chars)}자)")
                 checkbox.setEnabled(len(available_chars) > 0)
                 checkbox.setChecked(len(available_chars) > 0)
-                
+
                 self.charset_checkboxes[range_name] = {
-                    'checkbox': checkbox,
-                    'chars': available_chars,
-                    'range': (start, end)
+                    "checkbox": checkbox,
+                    "chars": available_chars,
+                    "range": (start, end),
                 }
-                
+
                 self.charset_layout.addWidget(checkbox)
-                
+
         except Exception as e:
-            QMessageBox.warning(self, "오류", f"폰트 파일을 읽는 중 오류가 발생했습니다: {str(e)}")
+            QMessageBox.warning(
+                self, "오류", f"폰트 파일을 읽는 중 오류가 발생했습니다: {str(e)}"
+            )
 
     def _get_charset_ranges(self):
         """문자셋 범위 정의"""
@@ -124,8 +135,8 @@ class FontSelector(QGroupBox):
         """선택된 문자셋 반환"""
         selected = {}
         for range_name, data in self.charset_checkboxes.items():
-            if data['checkbox'].isChecked():
-                selected[range_name] = data['chars']
+            if data["checkbox"].isChecked():
+                selected[range_name] = data["chars"]
         return selected
 
     def has_font_selected(self):

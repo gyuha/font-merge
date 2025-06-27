@@ -6,5 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+*.ttf
+
 # Virtual environments
 .venv
+
+.vscode/PythonImportHelper-v2-Completion.json
