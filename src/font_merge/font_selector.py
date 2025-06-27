@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -56,6 +57,15 @@ class FontSelector(QGroupBox):
         self.charset_group.setMinimumHeight(250)
         self.charset_layout = QVBoxLayout()
 
+        # 전체 선택/해제 버튼 영역
+        button_layout = QHBoxLayout()
+        self.select_all_button = QPushButton("전체 선택")
+        self.deselect_all_button = QPushButton("전체 해제")
+        self.select_all_button.clicked.connect(self._select_all_charsets)
+        self.deselect_all_button.clicked.connect(self._deselect_all_charsets)
+        button_layout.addWidget(self.select_all_button)
+        button_layout.addWidget(self.deselect_all_button)
+
         # 스크롤 영역
         scroll = QScrollArea()
         scroll_widget = QWidget()
@@ -64,6 +74,7 @@ class FontSelector(QGroupBox):
         scroll.setWidgetResizable(True)
 
         charset_main_layout = QVBoxLayout()
+        charset_main_layout.addLayout(button_layout)
         charset_main_layout.addWidget(scroll)
         self.charset_group.setLayout(charset_main_layout)
         layout.addWidget(self.charset_group)
@@ -140,19 +151,19 @@ class FontSelector(QGroupBox):
     def _get_charset_ranges(self):
         """문자셋 범위 정의"""
         return {
-            "한글": (0xAC00, 0xD7AF),
             "영문 대문자": (0x0041, 0x005A),
             "영문 소문자": (0x0061, 0x007A),
             "숫자": (0x0030, 0x0039),
+            "한글": (0xAC00, 0xD7AF),
+            "한글 자모": (0x1100, 0x11FF),
+            "한글 호환 자모": (0x3130, 0x318F),
+            "한글 반자모": (0xFFA0, 0xFFDC),
             "기본 기호": (0x0020, 0x007F),
             "라틴 확장 A": (0x0100, 0x017F),
             "라틴 확장 B": (0x0180, 0x024F),
             "일반 구두점": (0x2000, 0x206F),
             "위 첨자/아래 첨자": (0x2070, 0x209F),
             "통화 기호": (0x20A0, 0x20CF),
-            "한글 자모": (0x1100, 0x11FF),
-            "한글 호환 자모": (0x3130, 0x318F),
-            "한글 반자모": (0xFFA0, 0xFFDC),
             "CJK 기호": (0x3000, 0x303F),
             "히라가나": (0x3040, 0x309F),
             "가타카나": (0x30A0, 0x30FF),
@@ -219,3 +230,17 @@ class FontSelector(QGroupBox):
     def is_base_font(self):
         """기본 폰트로 선택되었는지 확인"""
         return self.base_font_checkbox.isChecked()
+
+    def _select_all_charsets(self):
+        """모든 문자셋 선택"""
+        for data in self.charset_checkboxes.values():
+            checkbox = data["checkbox"]
+            if checkbox.isEnabled():
+                checkbox.setChecked(True)
+
+    def _deselect_all_charsets(self):
+        """모든 문자셋 선택 해제"""
+        for data in self.charset_checkboxes.values():
+            checkbox = data["checkbox"]
+            if checkbox.isEnabled():
+                checkbox.setChecked(False)
