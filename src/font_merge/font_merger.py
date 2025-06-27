@@ -22,6 +22,7 @@ class FontMerger:
         font2_charsets,
         output_path,
         merge_option=0,
+        font_name=None,
     ):
         """
         두 폰트를 선택된 문자셋으로 병합
@@ -33,6 +34,7 @@ class FontMerger:
             font2_charsets: 두 번째 폰트에서 선택된 문자셋 딕셔너리
             output_path: 출력 폰트 파일 경로
             merge_option: 병합 옵션 (0: 기본, 1: UPM 통일, 2: 관대한 옵션)
+            font_name: 사용자 정의 폰트 이름 (None이면 기본 폰트 이름 사용)
 
         Returns:
             bool: 성공 여부
@@ -62,6 +64,10 @@ class FontMerger:
                 merged_font = self._merge_font_files(
                     temp1_path, temp2_path, merge_option
                 )
+
+                # 폰트 이름 설정
+                if font_name:
+                    self._update_font_name(merged_font, font_name)
 
                 # 결과 저장
                 merged_font.save(output_path)
@@ -270,3 +276,44 @@ class FontMerger:
 
         except Exception as e:
             return False, f"폰트 유효성 검사 중 오류: {str(e)}"
+
+    def _update_font_name(self, font, font_name):
+        """
+        폰트의 이름을 업데이트
+
+        Args:
+            font: TTFont 객체
+            font_name: 새로운 폰트 이름
+        """
+        if 'name' not in font:
+            return
+
+        name_table = font['name']
+        
+        # 폰트 이름 관련 name ID들
+        # 1: Font Family name
+        # 4: Full font name
+        # 6: PostScript name
+        name_ids = [1, 4, 6]
+        
+        for name_id in name_ids:
+            # 기존 레코드 제거
+            name_table.removeNames(nameID=name_id)
+            
+            # 새로운 이름 추가 (영어, Windows)
+            name_table.setName(
+                font_name, 
+                name_id, 
+                3,  # Platform ID: Microsoft
+                1,  # Encoding ID: Unicode BMP
+                0x409  # Language ID: English (US)
+            )
+            
+            # 새로운 이름 추가 (영어, Mac)
+            name_table.setName(
+                font_name,
+                name_id,
+                1,  # Platform ID: Macintosh
+                0,  # Encoding ID: Roman
+                0   # Language ID: English
+            )
