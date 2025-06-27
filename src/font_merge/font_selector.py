@@ -123,13 +123,29 @@ class FontSelector(QGroupBox):
             font = TTFont(self.font_path)
             cmap = font.getBestCmap()
 
+            # 합자 정보 확인
+            ligature_glyphs = self._find_ligature_glyphs(font)
+
             # 문자셋 범위별로 분류
             charset_ranges = self._get_charset_ranges()
 
             for range_name, (start, end) in charset_ranges.items():
-                available_chars = [
-                    chr(code) for code in range(start, end + 1) if code in cmap
-                ]
+                if "합자" in range_name or "Ligature" in range_name:
+                    # 합자의 경우 실제 합자 글리프 수 사용
+                    if range_name == "표준 합자":
+                        available_chars = [
+                            chr(code) for code in range(start, end + 1) if code in cmap
+                        ]
+                        if ligature_glyphs:
+                            available_chars.extend([f"lig_{i}" for i in range(len(ligature_glyphs))])
+                    else:
+                        available_chars = [
+                            chr(code) for code in range(start, end + 1) if code in cmap
+                        ]
+                else:
+                    available_chars = [
+                        chr(code) for code in range(start, end + 1) if code in cmap
+                    ]
 
                 checkbox = QCheckBox(f"{range_name} ({len(available_chars)}자)")
                 checkbox.setEnabled(len(available_chars) > 0)
@@ -169,7 +185,10 @@ class FontSelector(QGroupBox):
             "가타카나": (0x30A0, 0x30FF),
             "CJK 통합 한자": (0x4E00, 0x9FFF),
             "CJK 확장 A": (0x3400, 0x4DBF),
-            "합자 (Ligatures)": (0xFB00, 0xFB4F),
+            "표준 합자": (0xFB00, 0xFB4F),
+            "프로그래밍 합자 1": (0xE000, 0xE0FF),
+            "프로그래밍 합자 2": (0xE100, 0xE1FF),
+            "확장 합자": (0xF000, 0xF0FF),
             "수학 기호": (0x2200, 0x22FF),
             "화살표": (0x2190, 0x21FF),
             "박스 그리기": (0x2500, 0x257F),
@@ -244,3 +263,32 @@ class FontSelector(QGroupBox):
             checkbox = data["checkbox"]
             if checkbox.isEnabled():
                 checkbox.setChecked(False)
+
+    def _find_ligature_glyphs(self, font):
+        """폰트에서 합자 글리프 찾기"""
+        ligature_glyphs = []
+        try:
+            # GSUB 테이블에서 합자 정보 확인
+            if 'GSUB' in font:
+                gsub = font['GSUB']
+                if hasattr(gsub, 'table') and hasattr(gsub.table, 'FeatureList'):
+                    feature_list = gsub.table.FeatureList
+                    if hasattr(feature_list, 'FeatureRecord'):
+                        for feature_record in feature_list.FeatureRecord:
+                            # 'liga' (Standard Ligatures) 기능 찾기
+                            if feature_record.FeatureTag == 'liga':
+                                ligature_glyphs.append(f"liga_feature")
+            
+            # 글리프 이름에서 합자 패턴 찾기
+            if hasattr(font, 'getGlyphSet'):
+                glyph_set = font.getGlyphSet()
+                for glyph_name in glyph_set.keys():
+                    # 일반적인 합자 글리프 이름 패턴
+                    if any(pattern in glyph_name.lower() for pattern in
+                           ['liga', 'fi', 'fl', 'ff', 'ffi', 'ffl', 'arrow', 'equal']):
+                        ligature_glyphs.append(glyph_name)
+                        
+        except Exception:
+            pass  # 오류 시 빈 리스트 반환
+            
+        return ligature_glyphs
