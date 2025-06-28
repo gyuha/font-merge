@@ -5,9 +5,9 @@ Supports Windows and macOS executable generation using PyInstaller
 """
 
 import os
-import sys
-import subprocess
 import platform
+import subprocess
+import sys
 from pathlib import Path
 
 

@@ -53,6 +53,7 @@ class FontMergeWorker(QThread):
         save_path,
         merge_option,
         font_name,
+        output_format,
     ):
         super().__init__()
         self.merger = merger
@@ -63,6 +64,7 @@ class FontMergeWorker(QThread):
         self.save_path = save_path
         self.merge_option = merge_option
         self.font_name = font_name
+        self.output_format = output_format
 
     def run(self):
         """백그라운드에서 폰트 병합 수행"""
@@ -70,7 +72,7 @@ class FontMergeWorker(QThread):
             self.progress.emit("폰트 파일을 분석하는 중...")
 
             # 폰트 병합 실행
-            success = self.merger.merge_fonts(
+            success = self.merger.merge_fonts_with_format(
                 self.base_font_path,
                 self.base_charsets,
                 self.secondary_font_path,
@@ -78,6 +80,7 @@ class FontMergeWorker(QThread):
                 self.save_path,
                 self.merge_option,
                 self.font_name,
+                self.output_format,
             )
 
             if success:
@@ -208,15 +211,32 @@ class FontMergeApp(QMainWindow):
         self.upm_warning_label.setVisible(False)
         main_layout.addWidget(self.upm_warning_label)
 
-        # 하단 합치기 버튼
-        self.merge_button = QPushButton("폰트 합치기")
-        self.merge_button.setMinimumHeight(50)
-        self.merge_button.clicked.connect(self.merge_fonts)
-        main_layout.addWidget(self.merge_button)
+        # 하단 합치기 버튼들 (TTF, WOFF2)
+        buttons_layout = QHBoxLayout()
+
+        self.merge_ttf_button = QPushButton("폰트 합치기 (TTF)")
+        self.merge_ttf_button.setMinimumHeight(50)
+        self.merge_ttf_button.clicked.connect(self.merge_fonts_ttf)
+        buttons_layout.addWidget(self.merge_ttf_button)
+
+        self.merge_woff2_button = QPushButton("폰트 합치기 (WOFF2)")
+        self.merge_woff2_button.setMinimumHeight(50)
+        self.merge_woff2_button.clicked.connect(self.merge_fonts_woff2)
+        buttons_layout.addWidget(self.merge_woff2_button)
+
+        main_layout.addLayout(buttons_layout)
 
         central_widget.setLayout(main_layout)
 
-    def merge_fonts(self):
+    def merge_fonts_ttf(self):
+        """TTF 형식으로 폰트 병합"""
+        self._merge_fonts_with_format("ttf")
+
+    def merge_fonts_woff2(self):
+        """WOFF2 형식으로 폰트 병합"""
+        self._merge_fonts_with_format("woff2")
+
+    def _merge_fonts_with_format(self, output_format):
         # 폰트 선택 여부 확인
         if (
             not self.left_font.has_font_selected()
@@ -233,14 +253,24 @@ class FontMergeApp(QMainWindow):
             QMessageBox.warning(self, "경고", "최소 하나의 문자셋을 선택해주세요.")
             return
 
+        # 파일 확장자와 필터 설정
+        if output_format == "woff2":
+            file_extension = ".woff2"
+            file_filter = "WOFF2 Font (*.woff2)"
+            dialog_title = "합쳐진 폰트 저장 (WOFF2)"
+        else:  # ttf
+            file_extension = ".ttf"
+            file_filter = "TrueType Font (*.ttf)"
+            dialog_title = "합쳐진 폰트 저장 (TTF)"
+
         # 폰트 이름 옵션 확인 (저장 파일명 결정용)
-        default_filename = "merged_font.ttf"
+        default_filename = f"merged_font{file_extension}"
         if self.font_name_option_group.checkedId() == 1:  # 사용자 정의 이름
             custom_name = self.font_name_input.text().strip()
             if custom_name:
                 # 파일명에 사용할 수 없는 문자 제거
                 safe_name = self._sanitize_filename(custom_name)
-                default_filename = f"{safe_name}.ttf"
+                default_filename = f"{safe_name}{file_extension}"
         else:
             # 기본 폰트 이름 사용
             base_font_path = (
@@ -251,11 +281,11 @@ class FontMergeApp(QMainWindow):
             base_font_name = self._extract_font_name(base_font_path)
             if base_font_name:
                 safe_name = self._sanitize_filename(base_font_name)
-                default_filename = f"{safe_name}.ttf"
+                default_filename = f"{safe_name}{file_extension}"
 
         # 저장 경로 선택
         save_path, _ = QFileDialog.getSaveFileName(
-            self, "합쳐진 폰트 저장", default_filename, "TrueType Font (*.ttf)"
+            self, dialog_title, default_filename, file_filter
         )
 
         if save_path:
@@ -315,14 +345,16 @@ class FontMergeApp(QMainWindow):
                 save_path,
                 merge_option,
                 font_name,
+                output_format,
             )
 
             # 시그널 연결
             self.worker.finished.connect(self.on_merge_finished)
             self.worker.progress.connect(self.on_progress_update)
 
-            # 병합 버튼 비활성화
-            self.merge_button.setEnabled(False)
+            # 병합 버튼들 비활성화
+            self.merge_ttf_button.setEnabled(False)
+            self.merge_woff2_button.setEnabled(False)
 
             # 작업 시작
             self.worker.start()
@@ -333,7 +365,8 @@ class FontMergeApp(QMainWindow):
         if hasattr(self, "worker") and self.worker.isRunning():
             self.worker.terminate()
             self.worker.wait()
-        self.merge_button.setEnabled(True)
+        self.merge_ttf_button.setEnabled(True)
+        self.merge_woff2_button.setEnabled(True)
 
     def on_progress_update(self, message):
         """진행 상황 업데이트"""
@@ -345,7 +378,8 @@ class FontMergeApp(QMainWindow):
         self.progress_dialog.close()
 
         # 병합 버튼 다시 활성화
-        self.merge_button.setEnabled(True)
+        self.merge_ttf_button.setEnabled(True)
+        self.merge_woff2_button.setEnabled(True)
 
         if success:
             QMessageBox.information(self, "완료", message)

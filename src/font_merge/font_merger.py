@@ -7,6 +7,14 @@ from fontTools.merge import Merger
 from fontTools.subset import Subsetter
 from fontTools.ttLib import TTFont
 
+try:
+    # WOFF2 지원 테스트를 위해 import 시도
+    import fontTools.ttLib.woff2  # noqa: F401
+    WOFF2_AVAILABLE = True
+except ImportError:
+    WOFF2_AVAILABLE = False
+    print("경고: WOFF2 압축 기능을 사용할 수 없습니다. brotli 패키지를 설치하세요.")
+
 
 class FontMerger:
     """두 폰트를 병합하는 클래스"""
@@ -202,6 +210,250 @@ class FontMerger:
 
         except Exception as e:
             raise Exception(f"폰트 병합 중 오류 발생: {str(e)}") from e
+
+    def merge_fonts_with_format(
+        self,
+        font1_path,
+        font1_charsets,
+        font2_path,
+        font2_charsets,
+        output_path,
+        merge_option=0,
+        font_name=None,
+        output_format="ttf",
+    ):
+        """
+        두 폰트를 선택된 문자셋으로 병합하고 지정된 형식으로 저장
+
+        Args:
+            font1_path: 첫 번째 폰트 파일 경로
+            font1_charsets: 첫 번째 폰트에서 선택된 문자셋 딕셔너리
+            font2_path: 두 번째 폰트 파일 경로
+            font2_charsets: 두 번째 폰트에서 선택된 문자셋 딕셔너리
+            output_path: 출력 폰트 파일 경로
+            merge_option: 병합 옵션 (0: 기본, 1: UPM 통일, 2: 관대한 옵션)
+            font_name: 사용자 정의 폰트 이름 (None이면 기본 폰트 이름 사용)
+            output_format: 출력 형식 ("ttf" 또는 "woff2")
+
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # WOFF2 형식이 요청되었지만 지원되지 않는 경우
+            if output_format == "woff2" and not WOFF2_AVAILABLE:
+                raise Exception(
+                    "WOFF2 형식은 지원되지 않습니다. brotli 패키지를 설치하세요:\n"
+                    "pip install brotli"
+                )
+
+            # 첫 번째 폰트에서 선택된 문자들만 추출
+            font1_subset = self._create_font_subset(font1_path, font1_charsets)
+            if not font1_subset:
+                raise Exception("첫 번째 폰트에서 문자셋을 추출할 수 없습니다.")
+
+            # 두 번째 폰트에서 선택된 문자들만 추출
+            font2_subset = self._create_font_subset(font2_path, font2_charsets)
+            if not font2_subset:
+                raise Exception("두 번째 폰트에서 문자셋을 추출할 수 없습니다.")
+
+            # 임시 파일로 서브셋 저장
+            with tempfile.NamedTemporaryFile(suffix=".ttf", delete=False) as temp1:
+                font1_subset.save(temp1.name)
+                temp1_path = temp1.name
+
+            with tempfile.NamedTemporaryFile(suffix=".ttf", delete=False) as temp2:
+                font2_subset.save(temp2.name)
+                temp2_path = temp2.name
+
+            try:
+                # 두 폰트 병합 (파일 경로 사용)
+                merged_font = self._merge_font_files(
+                    temp1_path, temp2_path, merge_option
+                )
+
+                # 폰트 이름 설정
+                if font_name:
+                    self._update_font_name(merged_font, font_name)
+
+                # 합자 지원 복원 (기본 폰트 설정 보존)
+                self._restore_ligature_support(merged_font, temp1_path, temp2_path)
+
+                # 형식에 따라 저장
+                if output_format == "woff2":
+                    self._save_as_woff2_via_ttf(merged_font, output_path)
+                else:
+                    # TTF 형식으로 저장
+                    merged_font.save(output_path)
+            finally:
+                # 임시 파일 정리
+                os.unlink(temp1_path)
+                os.unlink(temp2_path)
+
+            return True
+
+        except Exception as e:
+            raise Exception(f"폰트 병합 중 오류 발생: {str(e)}") from e
+
+    def _save_as_woff2_via_ttf(self, font, output_path):
+        """
+        TTF 파일을 먼저 생성한 후 WOFF2로 변환하는 방식
+
+        Args:
+            font: TTFont 객체
+            output_path: 출력 파일 경로
+        """
+        if not WOFF2_AVAILABLE:
+            raise Exception(
+                "WOFF2 형식은 지원되지 않습니다. brotli 패키지를 설치하세요."
+            )
+
+        # 임시 TTF 파일 경로 생성 (사용자가 보관할 수 있도록 같은 디렉토리에)
+        base_name = os.path.splitext(output_path)[0]
+        temp_ttf_path = f"{base_name}_temp.ttf"
+        backup_ttf_path = f"{base_name}.ttf"
+
+        try:
+            print("1단계: TTF 파일 생성 중...")
+
+            # WOFF2 호환성을 위한 메타데이터 최적화
+            self._optimize_for_woff2(font)
+
+            # 먼저 TTF로 저장 (flavor를 None으로 설정)
+            font.flavor = None
+            font.save(temp_ttf_path)
+            print(f"✓ 임시 TTF 파일 생성: {temp_ttf_path}")
+
+            print("2단계: TTF → WOFF2 변환 중...")
+
+            # TTF 파일을 다시 로드하여 WOFF2로 변환
+            ttf_font = TTFont(temp_ttf_path)
+            ttf_font.flavor = "woff2"
+            ttf_font.save(output_path)
+            ttf_font.close()
+
+            print(f"✓ WOFF2 변환 완료: {output_path}")
+
+            # TTF 백업 파일도 생성 (WOFF2가 인식되지 않을 경우 대안으로 사용)
+            try:
+                os.rename(temp_ttf_path, backup_ttf_path)
+                print(f"✓ TTF 백업 파일 생성: {backup_ttf_path}")
+                temp_ttf_path = None  # 이미 이름이 바뀌었으므로 삭제하지 않음
+            except Exception as e:
+                print(f"⚠ TTF 백업 파일 생성 실패: {str(e)}")
+
+            # 저장된 파일 검증
+            self._verify_woff2_file(output_path)
+
+        except Exception as e:
+            raise Exception(f"TTF → WOFF2 변환 중 오류: {str(e)}") from e
+        finally:
+            # 임시 TTF 파일 정리 (백업으로 이름이 바뀌지 않은 경우만)
+            try:
+                if temp_ttf_path and os.path.exists(temp_ttf_path):
+                    os.unlink(temp_ttf_path)
+                    print(f"✓ 임시 파일 정리: {temp_ttf_path}")
+            except Exception as e:
+                print(f"⚠ 임시 파일 정리 실패: {str(e)}")
+
+    def _optimize_for_woff2(self, font):
+        """
+        WOFF2 형식 호환성을 위한 폰트 최적화
+
+        Args:
+            font: TTFont 객체
+        """
+        try:
+            # OS/2 테이블 최적화 (웹 폰트 호환성)
+            if "OS/2" in font:
+                os2_table = font["OS/2"]
+
+                # fsType을 0으로 설정 (Installable Embedding)
+                # 원본값이 4(Restricted License)인 경우 웹에서 사용 제한될 수 있음
+                if hasattr(os2_table, "fsType"):
+                    original_fstype = os2_table.fsType
+                    os2_table.fsType = 0  # 웹 폰트 사용 허용
+                    print(f"✓ fsType 최적화: {original_fstype} -> 0")
+
+                # Weight와 Width 확인
+                if hasattr(os2_table, "usWeightClass") and os2_table.usWeightClass == 0:
+                    os2_table.usWeightClass = 400
+                if hasattr(os2_table, "usWidthClass") and os2_table.usWidthClass == 0:
+                    os2_table.usWidthClass = 5
+
+            # head 테이블 최적화
+            if "head" in font:
+                head_table = font["head"]
+                # 체크섬 조정 플래그 설정
+                if hasattr(head_table, "flags"):
+                    head_table.flags |= 0x0001  # baseline for font at y=0
+
+                # macStyle 확인
+                if hasattr(head_table, "macStyle"):
+                    head_table.macStyle = 0  # Regular
+
+            # name 테이블 최적화 (중복 제거)
+            if "name" in font:
+                self._optimize_name_table_for_web(font["name"])
+
+        except Exception as e:
+            print(f"⚠ WOFF2 최적화 중 경고: {str(e)}")
+
+    def _optimize_name_table_for_web(self, name_table):
+        """
+        웹 폰트를 위한 name 테이블 최적화
+
+        Args:
+            name_table: name 테이블 객체
+        """
+        try:
+            # 웹 폰트에 필요한 핵심 nameID만 유지
+            essential_name_ids = {0, 1, 2, 3, 4, 5, 6, 16, 17}
+
+            # 불필요한 name 레코드 제거
+            filtered_names = []
+            for record in name_table.names:
+                if record.nameID in essential_name_ids:
+                    filtered_names.append(record)
+
+            if len(filtered_names) < len(name_table.names):
+                name_table.names = filtered_names
+                print(f"✓ Name 테이블 최적화: {len(name_table.names)} 레코드 유지")
+
+        except Exception as e:
+            print(f"⚠ Name 테이블 최적화 중 경고: {str(e)}")
+
+    def _verify_woff2_file(self, file_path):
+        """
+        생성된 WOFF2 파일 검증
+
+        Args:
+            file_path: WOFF2 파일 경로
+        """
+        try:
+            # 파일 크기 확인
+            file_size = os.path.getsize(file_path)
+            if file_size < 1000:  # 1KB 미만이면 문제 있을 수 있음
+                print(f"⚠ WOFF2 파일 크기가 작습니다: {file_size} bytes")
+
+            # 파일 로드 테스트
+            test_font = TTFont(file_path)
+
+            # 기본 테이블 존재 확인
+            required_tables = ["cmap", "head", "name", "OS/2"]
+            missing_tables = []
+            for table in required_tables:
+                if table not in test_font:
+                    missing_tables.append(table)
+
+            if missing_tables:
+                print(f"⚠ 누락된 필수 테이블: {', '.join(missing_tables)}")
+            else:
+                print("✓ WOFF2 파일 검증 완료")
+
+            test_font.close()
+
+        except Exception as e:
+            print(f"⚠ WOFF2 파일 검증 중 오류: {str(e)}")
 
     def _create_font_subset(self, font_path, selected_charsets):
         """

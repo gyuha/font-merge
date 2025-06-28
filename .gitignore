@@ -6,8 +6,10 @@ dist/
 wheels/
 *.egg-info
 
+# fonts
 *.ttf
 *.otf
+*.woff2
 
 # Virtual environments
 .venv

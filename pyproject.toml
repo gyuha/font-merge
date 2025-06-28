@@ -5,6 +5,7 @@ description = "PyQt6 desktop application for merging two fonts into a single fon
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "brotli>=1.1.0",
     "fonttools>=4.58.4",
     "pillow>=11.2.1",
     "pyinstaller>=6.14.1",
