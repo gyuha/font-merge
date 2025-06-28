@@ -37,10 +37,20 @@ def create_simple_dmg():
     temp_dir.mkdir()
 
     try:
-        # Copy app to temp directory
+        # Copy app to temp directory preserving symlinks
         app_dest = temp_dir / "FontMerge.app"
-        shutil.copytree(app_path, app_dest)
-        print("✓ Copied app to temp directory")
+        
+        # Use cp -R to preserve symlinks and structure
+        cp_cmd = ["cp", "-R", str(app_path), str(app_dest)]
+        
+        result = subprocess.run(cp_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"❌ cp failed: {result.stderr}")
+            # Fallback to shutil with symlinks=True
+            shutil.copytree(app_path, app_dest, symlinks=True)
+            print("✓ Copied app to temp directory (shutil with symlinks)")
+        else:
+            print("✓ Copied app to temp directory (cp -R preserving symlinks)")
 
         # Create Applications folder symlink
         apps_link = temp_dir / "Applications"

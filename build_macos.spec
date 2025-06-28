@@ -43,10 +43,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='FontMerge',
     debug=False,
     bootloader_ignore_signals=False,
@@ -60,11 +58,21 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(icon_path) if icon_path.exists() else None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='FontMerge',
 )
 
 app = BUNDLE(
-    exe,
+    coll,
     name='FontMerge.app',
     icon=str(icon_path) if icon_path.exists() else None,
     bundle_identifier='com.fontmerge.app',
