@@ -7,6 +7,7 @@ Builds app bundle and creates installer DMG in one go
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 
@@ -64,31 +65,38 @@ def check_prerequisites():
     return True
 
 
+def get_version_from_pyproject():
+    """Get version from pyproject.toml"""
+    try:
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+            return data["project"]["version"]
+    except Exception:
+        return "1.0.0"
+
+
 def get_build_info():
     """Get build information"""
     try:
+        # Get version from pyproject.toml
+        version = get_version_from_pyproject()
+        
         # Get git info if available
         try:
             git_hash = subprocess.check_output(
                 ["git", "rev-parse", "--short", "HEAD"],
                 stderr=subprocess.DEVNULL
             ).decode().strip()
-
-            git_tag = subprocess.check_output(
-                ["git", "describe", "--tags", "--abbrev=0"],
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
-        except:
+        except Exception:
             git_hash = "unknown"
-            git_tag = "v1.0.0"
 
         return {
-            "version": git_tag,
+            "version": f"v{version}",
             "commit": git_hash,
             "platform": "macOS",
             "arch": subprocess.check_output(["uname", "-m"]).decode().strip()
         }
-    except:
+    except Exception:
         return {
             "version": "v1.0.0",
             "commit": "unknown",
@@ -113,7 +121,8 @@ def print_build_summary(build_info, success=True):
 
         # Check output files
         app_path = Path("dist/FontMerge.app")
-        dmg_path = Path("FontMerge-1.0.0.dmg")
+        version_num = build_info['version'].lstrip('v')  # Remove 'v' prefix
+        dmg_path = Path(f"FontMerge-{version_num}.dmg")
 
         if app_path.exists():
             app_size = sum(f.stat().st_size for f in app_path.rglob("*") if f.is_file())
@@ -125,7 +134,7 @@ def print_build_summary(build_info, success=True):
 
         print("\n💡 DISTRIBUTION:")
         print("   • App Bundle: dist/FontMerge.app")
-        print("   • Installer: FontMerge-1.0.0.dmg")
+        print(f"   • Installer: FontMerge-{version_num}.dmg")
         print("   • Ready for distribution!")
 
     else:

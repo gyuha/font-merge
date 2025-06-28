@@ -8,7 +8,18 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
+
+
+def get_version_from_pyproject():
+    """Get version from pyproject.toml"""
+    try:
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+            return data["project"]["version"]
+    except Exception:
+        return "1.0.0"
 
 
 def create_simple_dmg():
@@ -21,8 +32,9 @@ def create_simple_dmg():
         print("❌ FontMerge.app not found in dist/")
         return False
 
-    # DMG settings
-    dmg_name = "FontMerge-1.0.0"
+    # DMG settings - get version from pyproject.toml
+    version = get_version_from_pyproject()
+    dmg_name = f"FontMerge-{version}"
     dmg_path = Path(f"{dmg_name}.dmg")
 
     # Remove existing DMG
