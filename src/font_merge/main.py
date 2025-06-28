@@ -1,9 +1,11 @@
 import os
+import re
 import sys
 
 # Qt 디버그 로그 억제
 os.environ["QT_LOGGING_RULES"] = "*=false"
 
+from fontTools.ttLib import TTFont
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -156,9 +158,29 @@ class FontMergeApp(QMainWindow):
             QMessageBox.warning(self, "경고", "최소 하나의 문자셋을 선택해주세요.")
             return
 
+        # 폰트 이름 옵션 확인 (저장 파일명 결정용)
+        default_filename = "merged_font.ttf"
+        if self.font_name_option_group.checkedId() == 1:  # 사용자 정의 이름
+            custom_name = self.font_name_input.text().strip()
+            if custom_name:
+                # 파일명에 사용할 수 없는 문자 제거
+                safe_name = self._sanitize_filename(custom_name)
+                default_filename = f"{safe_name}.ttf"
+        else:
+            # 기본 폰트 이름 사용
+            base_font_path = (
+                self.left_font.get_font_path()
+                if self.left_font.is_base_font()
+                else self.right_font.get_font_path()
+            )
+            base_font_name = self._extract_font_name(base_font_path)
+            if base_font_name:
+                safe_name = self._sanitize_filename(base_font_name)
+                default_filename = f"{safe_name}.ttf"
+
         # 저장 경로 선택
         save_path, _ = QFileDialog.getSaveFileName(
-            self, "합쳐진 폰트 저장", "merged_font.ttf", "TrueType Font (*.ttf)"
+            self, "합쳐진 폰트 저장", default_filename, "TrueType Font (*.ttf)"
         )
 
         if save_path:
@@ -254,7 +276,8 @@ class FontMergeApp(QMainWindow):
             if current_option == 0:  # 기존 설정 사용
                 return (
                     "💡 해결책: 폰트 호환성 문제가 발생했습니다.\n"
-                    "병합 옵션에서 'Units per em 통일' 또는 '관대한 병합 옵션'을 시도해보세요."
+                    "병합 옵션에서 'Units per em 통일' 또는 '관대한 병합 옵션'을 "
+                    "시도해보세요."
                 )
             elif current_option == 1:  # UPM 통일
                 return (
@@ -295,6 +318,54 @@ class FontMergeApp(QMainWindow):
                 "• 선택한 문자셋을 줄여보세요\n"
                 "• 폰트 파일이 손상되지 않았는지 확인해보세요"
             )
+
+    def _sanitize_filename(self, filename):
+        """파일명에 사용할 수 없는 문자를 제거"""
+        # 파일명에 사용할 수 없는 문자들을 제거하거나 대체
+        illegal_chars = r'[<>:"/\\|?*]'
+        safe_filename = re.sub(illegal_chars, "_", filename)
+
+        # 연속된 공백을 하나로 줄이고 앞뒤 공백 제거
+        safe_filename = re.sub(r"\s+", " ", safe_filename.strip())
+
+        # 최대 길이 제한 (확장자 제외하고 100자)
+        if len(safe_filename) > 100:
+            safe_filename = safe_filename[:100]
+
+        return safe_filename if safe_filename else "merged_font"
+
+    def _extract_font_name(self, font_path):
+        """폰트 파일에서 폰트 이름 추출"""
+        try:
+            font = TTFont(font_path)
+
+            if "name" not in font:
+                return None
+
+            name_table = font["name"]
+
+            # 폰트 Family 이름 찾기 (nameID 1)
+            for record in name_table.names:
+                if record.nameID == 1:  # Font Family name
+                    # Windows Unicode 우선
+                    if record.platformID == 3 and record.platEncID == 1:
+                        return record.toUnicode()
+                    # Mac Roman도 시도
+                    elif record.platformID == 1 and record.platEncID == 0:
+                        return record.toUnicode()
+
+            # Full name도 시도 (nameID 4)
+            for record in name_table.names:
+                if record.nameID == 4:  # Full font name
+                    if record.platformID == 3 and record.platEncID == 1:
+                        return record.toUnicode()
+                    elif record.platformID == 1 and record.platEncID == 0:
+                        return record.toUnicode()
+
+            return None
+
+        except Exception:
+            return None
 
 
 def main():
