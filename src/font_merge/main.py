@@ -6,6 +6,7 @@ import sys
 os.environ["QT_LOGGING_RULES"] = "*=false"
 
 from fontTools.ttLib import TTFont
+from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -17,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QRadioButton,
     QVBoxLayout,
@@ -32,6 +34,63 @@ except (ImportError, ValueError):
     # 절대 import 시도 (PyInstaller 환경)
     from font_merge.font_merger import FontMerger
     from font_merge.font_selector import FontSelector
+
+
+class FontMergeWorker(QThread):
+    """폰트 병합 작업을 백그라운드에서 수행하는 워커 스레드"""
+
+    # 작업 완료 시그널
+    finished = pyqtSignal(bool, str)  # (성공 여부, 메시지/오류내용)
+    progress = pyqtSignal(str)  # 진행 상황 메시지
+
+    def __init__(
+        self,
+        merger,
+        base_font_path,
+        base_charsets,
+        secondary_font_path,
+        secondary_charsets,
+        save_path,
+        merge_option,
+        font_name,
+    ):
+        super().__init__()
+        self.merger = merger
+        self.base_font_path = base_font_path
+        self.base_charsets = base_charsets
+        self.secondary_font_path = secondary_font_path
+        self.secondary_charsets = secondary_charsets
+        self.save_path = save_path
+        self.merge_option = merge_option
+        self.font_name = font_name
+
+    def run(self):
+        """백그라운드에서 폰트 병합 수행"""
+        try:
+            self.progress.emit("폰트 파일을 분석하는 중...")
+
+            # 폰트 병합 실행
+            success = self.merger.merge_fonts(
+                self.base_font_path,
+                self.base_charsets,
+                self.secondary_font_path,
+                self.secondary_charsets,
+                self.save_path,
+                self.merge_option,
+                self.font_name,
+            )
+
+            if success:
+                self.finished.emit(
+                    True,
+                    f"폰트가 성공적으로 합쳐졌습니다.\n저장 위치: {self.save_path}",
+                )
+            else:
+                self.finished.emit(False, "폰트 병합에 실패했습니다.")
+
+        except Exception as e:
+            error_message = str(e)
+            self.finished.emit(False, error_message)
 
 
 class FontMergeApp(QMainWindow):
@@ -200,76 +259,109 @@ class FontMergeApp(QMainWindow):
         )
 
         if save_path:
-            try:
-                # 폰트 병합 수행
-                merger = FontMerger()
+            # 폰트 병합 수행
+            merger = FontMerger()
 
-                # 폰트 유효성 검사
-                is_valid, error_msg = merger.validate_fonts(
-                    self.left_font.get_font_path(), self.right_font.get_font_path()
-                )
+            # 폰트 유효성 검사
+            is_valid, error_msg = merger.validate_fonts(
+                self.left_font.get_font_path(), self.right_font.get_font_path()
+            )
 
-                if not is_valid:
-                    QMessageBox.warning(self, "오류", error_msg)
-                    return
+            if not is_valid:
+                QMessageBox.warning(self, "오류", error_msg)
+                return
 
-                # 선택된 병합 옵션 가져오기
-                merge_option = self.merge_option_group.checkedId()
+            # 선택된 병합 옵션 가져오기
+            merge_option = self.merge_option_group.checkedId()
 
-                # 폰트 이름 옵션 가져오기
-                font_name = None
-                if self.font_name_option_group.checkedId() == 1:  # 사용자 정의 이름
-                    custom_name = self.font_name_input.text().strip()
-                    if custom_name:
-                        font_name = custom_name
+            # 폰트 이름 옵션 가져오기
+            font_name = None
+            if self.font_name_option_group.checkedId() == 1:  # 사용자 정의 이름
+                custom_name = self.font_name_input.text().strip()
+                if custom_name:
+                    font_name = custom_name
 
-                # 기본 폰트 설정에 따라 순서 결정 (사용자 선택 존중)
-                if self.left_font.is_base_font():
-                    base_font_path = self.left_font.get_font_path()
-                    base_charsets = left_charsets
-                    secondary_font_path = self.right_font.get_font_path()
-                    secondary_charsets = right_charsets
-                    print("✓ 왼쪽 폰트를 기본 폰트로 사용합니다 (합자 포함)")
-                else:
-                    base_font_path = self.right_font.get_font_path()
-                    base_charsets = right_charsets
-                    secondary_font_path = self.left_font.get_font_path()
-                    secondary_charsets = left_charsets
-                    print("✓ 오른쪽 폰트를 기본 폰트로 사용합니다 (합자 포함)")
+            # 기본 폰트 설정에 따라 순서 결정 (사용자 선택 존중)
+            if self.left_font.is_base_font():
+                base_font_path = self.left_font.get_font_path()
+                base_charsets = left_charsets
+                secondary_font_path = self.right_font.get_font_path()
+                secondary_charsets = right_charsets
+                print("✓ 왼쪽 폰트를 기본 폰트로 사용합니다 (합자 포함)")
+            else:
+                base_font_path = self.right_font.get_font_path()
+                base_charsets = right_charsets
+                secondary_font_path = self.left_font.get_font_path()
+                secondary_charsets = left_charsets
+                print("✓ 오른쪽 폰트를 기본 폰트로 사용합니다 (합자 포함)")
 
-                # 폰트 병합 실행
-                success = merger.merge_fonts(
-                    base_font_path,
-                    base_charsets,
-                    secondary_font_path,
-                    secondary_charsets,
-                    save_path,
-                    merge_option,
-                    font_name,
-                )
+            # 대기 다이얼로그 설정
+            self.progress_dialog = QProgressDialog(
+                "폰트를 병합하는 중입니다...", "취소", 0, 0, self
+            )
+            self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            self.progress_dialog.setWindowTitle("폰트 병합 중")
+            self.progress_dialog.setMinimumDuration(0)
+            self.progress_dialog.setValue(0)
+            self.progress_dialog.canceled.connect(self.cancel_merge)
 
-                if success:
-                    QMessageBox.information(
-                        self,
-                        "완료",
-                        f"폰트가 성공적으로 합쳐졌습니다.\n저장 위치: {save_path}",
-                    )
+            # 워커 스레드 생성 및 시작
+            self.worker = FontMergeWorker(
+                merger,
+                base_font_path,
+                base_charsets,
+                secondary_font_path,
+                secondary_charsets,
+                save_path,
+                merge_option,
+                font_name,
+            )
 
-            except Exception as e:
-                import traceback
+            # 시그널 연결
+            self.worker.finished.connect(self.on_merge_finished)
+            self.worker.progress.connect(self.on_progress_update)
 
-                error_details = traceback.format_exc()
-                print(f"폰트 합치기 오류 세부사항:\n{error_details}")
+            # 병합 버튼 비활성화
+            self.merge_button.setEnabled(False)
 
-                # 현재 선택된 옵션에 따라 다른 안내 메시지 제공
-                current_option = self.merge_option_group.checkedId()
-                suggestion = self._get_merge_option_suggestion(current_option, str(e))
+            # 작업 시작
+            self.worker.start()
+            self.progress_dialog.show()
 
-                QMessageBox.critical(
-                    self,
-                    "폰트 병합 실패",
-                    f"폰트 합치기 중 오류가 발생했습니다:\n\n{str(e)}\n\n{suggestion}",
-                )
+    def cancel_merge(self):
+        """병합 작업 취소"""
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.worker.terminate()
+            self.worker.wait()
+        self.merge_button.setEnabled(True)
+
+    def on_progress_update(self, message):
+        """진행 상황 업데이트"""
+        self.progress_dialog.setLabelText(message)
+
+    def on_merge_finished(self, success, message):
+        """병합 작업 완료 처리"""
+        # 대기 다이얼로그 닫기
+        self.progress_dialog.close()
+
+        # 병합 버튼 다시 활성화
+        self.merge_button.setEnabled(True)
+
+        if success:
+            QMessageBox.information(self, "완료", message)
+        else:
+            # 오류 처리
+            print(f"폰트 합치기 오류: {message}")
+
+            # 현재 선택된 옵션에 따라 다른 안내 메시지 제공
+            current_option = self.merge_option_group.checkedId()
+            suggestion = self._get_merge_option_suggestion(current_option, message)
+
+            QMessageBox.critical(
+                self,
+                "폰트 병합 실패",
+                f"폰트 합치기 중 오류가 발생했습니다:\n\n{message}\n\n{suggestion}",
+            )
 
     def _get_merge_option_suggestion(self, current_option, error_message):
         """현재 옵션과 오류 메시지에 따라 적절한 제안 제공"""
