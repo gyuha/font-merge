@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
@@ -69,6 +70,10 @@ class FontMergeApp(QMainWindow):
         # 두 FontSelector를 서로 연결
         self.left_font.set_other_selector(self.right_font)
         self.right_font.set_other_selector(self.left_font)
+
+        # 폰트 변경 시 UPM 차이 확인을 위한 연결
+        self.left_font.font_changed.connect(self.check_upm_difference)
+        self.right_font.font_changed.connect(self.check_upm_difference)
 
         main_layout.addLayout(font_layout)
 
@@ -132,6 +137,17 @@ class FontMergeApp(QMainWindow):
 
         options_group.setLayout(options_main_layout)
         main_layout.addWidget(options_group)
+
+        # UPM 차이 경고 라벨
+        self.upm_warning_label = QLabel("")
+        self.upm_warning_label.setStyleSheet(
+            "color: #d32f2f; background-color: #fff3e0; "
+            "border: 1px solid #ffb74d; border-radius: 4px; "
+            "padding: 8px; font-size: 12px; font-weight: bold;"
+        )
+        self.upm_warning_label.setWordWrap(True)
+        self.upm_warning_label.setVisible(False)
+        main_layout.addWidget(self.upm_warning_label)
 
         # 하단 합치기 버튼
         self.merge_button = QPushButton("폰트 합치기")
@@ -364,6 +380,54 @@ class FontMergeApp(QMainWindow):
 
             return None
 
+        except Exception:
+            return None
+
+    def check_upm_difference(self):
+        """두 폰트의 UPM 차이를 확인하고 경고 표시"""
+        try:
+            # 두 폰트가 모두 선택되었는지 확인
+            if (
+                not self.left_font.has_font_selected()
+                or not self.right_font.has_font_selected()
+            ):
+                self.upm_warning_label.setVisible(False)
+                return
+
+            # 두 폰트의 UPM 값 추출
+            left_upm = self._get_font_upm(self.left_font.get_font_path())
+            right_upm = self._get_font_upm(self.right_font.get_font_path())
+
+            if left_upm is None or right_upm is None:
+                self.upm_warning_label.setVisible(False)
+                return
+
+            # UPM 차이 계산 (2배 이상 차이가 나는지 확인)
+            ratio = max(left_upm, right_upm) / min(left_upm, right_upm)
+
+            if ratio >= 2.0:
+                warning_text = (
+                    f"⚠️ UPM 차이 경고: {left_upm} vs {right_upm} "
+                    f"(약 {ratio:.1f}배 차이)\n"
+                    "폰트 크기 차이가 커서 병합된 폰트에서 글자 크기가 "
+                    "불균등하게 보일 수 있습니다. "
+                    "'Units per em 통일' 옵션을 사용하시기 바랍니다."
+                )
+                self.upm_warning_label.setText(warning_text)
+                self.upm_warning_label.setVisible(True)
+            else:
+                self.upm_warning_label.setVisible(False)
+
+        except Exception:
+            self.upm_warning_label.setVisible(False)
+
+    def _get_font_upm(self, font_path):
+        """폰트 파일에서 UPM 값 추출"""
+        try:
+            font = TTFont(font_path)
+            if "head" in font:
+                return font["head"].unitsPerEm
+            return None
         except Exception:
             return None
 

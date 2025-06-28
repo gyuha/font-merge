@@ -3,6 +3,7 @@
 import os
 
 from fontTools.ttLib import TTFont
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -29,6 +30,9 @@ except (ImportError, ValueError):
 
 class FontSelector(QGroupBox):
     """폰트 파일 선택 및 문자셋 선택을 제공하는 위젯"""
+
+    # 폰트 변경 시 발생하는 시그널
+    font_changed = pyqtSignal()
 
     def __init__(self, title):
         super().__init__(title)
@@ -120,6 +124,9 @@ class FontSelector(QGroupBox):
                         and not self.other_selector.base_font_checkbox.isChecked()
                     ):
                         self.base_font_checkbox.setChecked(True)
+
+            # 폰트 변경 시그널 발생
+            self.font_changed.emit()
 
     def load_charset_options(self):
         """폰트의 문자셋 옵션 로드"""
