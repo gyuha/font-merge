@@ -6,7 +6,7 @@ import sys
 os.environ["QT_LOGGING_RULES"] = "*=false"
 
 from fontTools.ttLib import TTFont
-from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -494,10 +494,10 @@ class FontMergeApp(QMainWindow):
                 self.upm_warning_label.setVisible(False)
                 return
 
-            # UPM 차이 계산 (2배 이상 차이가 나는지 확인)
+            # UPM 차이 계산 (1.5배 이상 차이가 나는지 확인)
             ratio = max(left_upm, right_upm) / min(left_upm, right_upm)
 
-            if ratio >= 2.0:
+            if ratio >= 1.5:
                 warning_text = (
                     f"⚠️ UPM 차이 경고: {left_upm} vs {right_upm} "
                     f"(약 {ratio:.1f}배 차이)\n"
