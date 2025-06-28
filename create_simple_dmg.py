@@ -39,10 +39,10 @@ def create_simple_dmg():
     try:
         # Copy app to temp directory preserving symlinks
         app_dest = temp_dir / "FontMerge.app"
-        
+
         # Use cp -R to preserve symlinks and structure
         cp_cmd = ["cp", "-R", str(app_path), str(app_dest)]
-        
+
         result = subprocess.run(cp_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"❌ cp failed: {result.stderr}")

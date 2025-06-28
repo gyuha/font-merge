@@ -19,9 +19,11 @@ from PyQt6.QtWidgets import (
 # PyInstaller에서도 작동하는 안전한 import
 try:
     # 상대 import 시도
+    from .font_info import FontInfo
     from .font_preview import FontPreview
 except (ImportError, ValueError):
     # 절대 import 시도 (PyInstaller 환경)
+    from font_merge.font_info import FontInfo
     from font_merge.font_preview import FontPreview
 
 
@@ -49,6 +51,10 @@ class FontSelector(QGroupBox):
         self.file_label.setWordWrap(True)
         layout.addWidget(self.file_label)
 
+        # 폰트 정보 표시
+        self.font_info = FontInfo()
+        layout.addWidget(self.font_info)
+
         # 폰트 프리뷰
         self.preview = FontPreview()
         layout.addWidget(self.preview)
@@ -56,6 +62,7 @@ class FontSelector(QGroupBox):
         # 기본 폰트 선택 체크박스
         self.base_font_checkbox = QCheckBox("기본 폰트로 사용")
         self.base_font_checkbox.stateChanged.connect(self._on_base_font_changed)
+        self.base_font_checkbox.setStyleSheet("margin-bottom: 10px; padding-top: 5px")
         layout.addWidget(self.base_font_checkbox)
 
         # 문자셋 선택 영역
@@ -95,7 +102,9 @@ class FontSelector(QGroupBox):
 
         if file_path:
             self.font_path = file_path
-            self.file_label.setText(f"선택된 파일: {os.path.basename(file_path)}")
+            filename = os.path.basename(file_path)
+            self.file_label.setText(f"선택된 파일: {filename}")
+            self.font_info.update_font_info(file_path)
             self.preview.update_preview(file_path)
             self.load_charset_options()
 
