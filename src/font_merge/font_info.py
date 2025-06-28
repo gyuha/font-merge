@@ -1,6 +1,7 @@
 """폰트 정보 표시 위젯"""
 
 from fontTools.ttLib import TTFont
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
@@ -32,12 +33,14 @@ class FontInfo(QWidget):
         self.char_count_label.setStyleSheet("color: #666; font-size: 11px;")
         layout.addWidget(self.char_count_label)
 
-        # 호환성 경고 라벨
+        # 호환성 경고 라벨 (고정 높이 3줄)
         self.warning_label = QLabel("")
         self.warning_label.setStyleSheet(
             "color: #d32f2f; font-size: 11px; font-weight: bold;"
         )
         self.warning_label.setWordWrap(True)
+        self.warning_label.setFixedHeight(33)  # 11px * 3줄
+        self.warning_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(self.warning_label)
 
         self.setLayout(layout)
