@@ -14,6 +14,125 @@ class FontMerger:
     def __init__(self):
         self.merger = Merger()
 
+    def determine_optimal_font_order(self, font1_path, font2_path):
+        """
+        합자 보존을 위한 최적의 폰트 순서 결정
+
+        Args:
+            font1_path: 첫 번째 폰트 경로
+            font2_path: 두 번째 폰트 경로
+
+        Returns:
+            tuple: (base_font_path, secondary_font_path, should_swap)
+            should_swap이 True면 원래 순서를 바꿔야 함
+        """
+        try:
+            font1 = TTFont(font1_path)
+            font2 = TTFont(font2_path)
+
+            # 각 폰트의 합자 점수 계산
+            score1 = self._calculate_ligature_score(font1)
+            score2 = self._calculate_ligature_score(font2)
+
+            print(f"합자 점수 - 폰트1: {score1}, 폰트2: {score2}")
+
+            # 점수가 높은 폰트를 기본 폰트로 설정
+            if score2 > score1:
+                print("⚠ 합자 보존을 위해 폰트 순서를 변경합니다")
+                return font2_path, font1_path, True
+            else:
+                return font1_path, font2_path, False
+
+        except Exception as e:
+            print(f"폰트 순서 최적화 중 오류: {str(e)}")
+            return font1_path, font2_path, False
+
+    def _calculate_ligature_score(self, font):
+        """
+        폰트의 합자 기능 점수 계산
+
+        Returns:
+            int: 합자 점수 (높을수록 더 많은 합자 기능)
+        """
+        score = 0
+
+        try:
+            if "GSUB" not in font:
+                return 0
+
+            gsub_table = font["GSUB"]
+            if not (
+                hasattr(gsub_table.table, "FeatureList")
+                and gsub_table.table.FeatureList
+            ):
+                return 0
+
+            # 피처별 점수 부여
+            for feature_record in gsub_table.table.FeatureList.FeatureRecord:
+                feature_tag = feature_record.FeatureTag
+
+                if feature_tag == "liga":  # Standard Ligatures
+                    score += 100
+                elif feature_tag == "dlig":  # Discretionary Ligatures
+                    score += 50
+                elif feature_tag == "clig":  # Contextual Ligatures
+                    score += 50
+                elif feature_tag == "rlig":  # Required Ligatures
+                    score += 30
+                elif feature_tag == "calt":  # Contextual Alternates
+                    score += 20
+                elif feature_tag in ["kern", "curs"]:  # Kerning, Cursive
+                    score += 10
+                elif feature_tag in [
+                    "ss01",
+                    "ss02",
+                    "ss03",
+                    "ss04",
+                    "ss05",
+                    "ss06",
+                    "ss07",
+                    "ss08",
+                    "ss09",
+                    "ss10",
+                ]:  # Stylistic Sets
+                    score += 5
+
+            # 글리프 이름에서 합자 패턴 확인
+            if hasattr(font, "getGlyphSet"):
+                glyph_set = font.getGlyphSet()
+                ligature_glyphs = 0
+
+                for glyph_name in glyph_set.keys():
+                    if any(
+                        pattern in glyph_name.lower()
+                        for pattern in [
+                            "liga",
+                            "_",
+                            "arrow",
+                            "equal",
+                            "greater",
+                            "less",
+                            "ampersand",
+                            "at",
+                            "dollar",
+                            "percent",
+                        ]
+                    ):
+                        ligature_glyphs += 1
+
+                # 합자 글리프가 많으면 추가 점수
+                if ligature_glyphs > 50:
+                    score += 25
+                elif ligature_glyphs > 20:
+                    score += 15
+                elif ligature_glyphs > 10:
+                    score += 10
+
+        except Exception:
+            pass
+
+        return score
+
     def merge_fonts(
         self,
         font1_path,
@@ -69,7 +188,7 @@ class FontMerger:
                 if font_name:
                     self._update_font_name(merged_font, font_name)
 
-                # 합자 지원 복원 (병합 후 처리)
+                # 합자 지원 복원 (기본 폰트 설정 보존)
                 self._restore_ligature_support(merged_font, temp1_path, temp2_path)
 
                 # 결과 저장
@@ -126,13 +245,13 @@ class FontMerger:
             subsetter.options.recommended_glyphs = True
             subsetter.options.name_IDs = ["*"]
             subsetter.options.name_legacy = True
-            
+
             # 합자(ligature) 및 OpenType 피처 보존 설정
             subsetter.options.layout_features = ["*"]  # 모든 레이아웃 피처 유지
-            subsetter.options.layout_scripts = ["*"]   # 모든 스크립트 유지
-            subsetter.options.glyph_names = True       # 글리프 이름 유지
-            subsetter.options.legacy_kern = True       # 커닝 정보 유지
-            subsetter.options.hinting = True           # 힌팅 정보 유지
+            subsetter.options.layout_scripts = ["*"]  # 모든 스크립트 유지
+            subsetter.options.glyph_names = True  # 글리프 이름 유지
+            subsetter.options.legacy_kern = True  # 커닝 정보 유지
+            subsetter.options.hinting = True  # 힌팅 정보 유지
 
             # 서브셋 생성
             subsetter.populate(unicodes=unicodes)
@@ -174,10 +293,10 @@ class FontMerger:
         merger = Merger()
         if hasattr(merger, "duplicateGlyphsPerFont"):
             merger.duplicateGlyphsPerFont = True
-        
+
         # OpenType 피처 보존 설정
         merger.options.drop_tables = []  # 테이블 삭제 방지
-        
+
         return merger.merge([font1_path, font2_path])
 
     def _merge_with_upm_unification(self, font1_path, font2_path):
@@ -212,10 +331,10 @@ class FontMerger:
             merger = Merger()
             if hasattr(merger, "duplicateGlyphsPerFont"):
                 merger.duplicateGlyphsPerFont = True
-            
+
             # OpenType 피처 보존 설정
             merger.options.drop_tables = []  # 테이블 삭제 방지
-            
+
             return merger.merge([adjusted_font1_path, adjusted_font2_path])
         finally:
             os.unlink(adjusted_font1_path)
@@ -305,11 +424,11 @@ class FontMerger:
             font: TTFont 객체
             font_name: 새로운 폰트 이름
         """
-        if 'name' not in font:
+        if "name" not in font:
             return
 
-        name_table = font['name']
-        
+        name_table = font["name"]
+
         # 폰트 이름 관련 name ID들 - 모든 주요 이름 항목 포함
         # 1: Font Family name (패밀리 이름)
         # 2: Font Subfamily name (서브패밀리 이름, Regular 등)
@@ -318,141 +437,149 @@ class FontMerger:
         # 6: PostScript name
         # 16: Typographic Family name (선택적)
         # 17: Typographic Subfamily name (선택적)
-        
+
         # 기본 이름들은 모두 새 이름으로 설정
         primary_name_ids = [1, 4, 6]
-        
+
         # 먼저 모든 기존 이름 레코드를 확인하고 업데이트
         for name_record in name_table.names[:]:  # 복사본으로 순회
             if name_record.nameID in primary_name_ids:
                 # 기존 레코드 제거
                 name_table.names.remove(name_record)
-        
+
         # 새로운 이름들 추가
         platforms = [
             (3, 1, 0x409),  # Windows, Unicode BMP, English US
-            (1, 0, 0),      # Macintosh, Roman, English
+            (1, 0, 0),  # Macintosh, Roman, English
         ]
-        
+
         for platform_id, encoding_id, language_id in platforms:
             # Font Family name (ID 1)
             name_table.setName(font_name, 1, platform_id, encoding_id, language_id)
-            
-            # Full font name (ID 4) 
+
+            # Full font name (ID 4)
             name_table.setName(font_name, 4, platform_id, encoding_id, language_id)
-            
+
             # PostScript name (ID 6) - 공백 제거하고 특수문자 처리
-            ps_name = font_name.replace(' ', '').replace('-', '')
+            ps_name = font_name.replace(" ", "").replace("-", "")
             name_table.setName(ps_name, 6, platform_id, encoding_id, language_id)
-            
+
             # Unique identifier (ID 3) - 버전 정보 포함
             unique_id = f"{font_name}: 2023"
             name_table.setName(unique_id, 3, platform_id, encoding_id, language_id)
-        
+
         # Typographic names도 설정 (있는 경우)
         for name_record in name_table.names[:]:
             if name_record.nameID == 16:  # Typographic Family name
                 name_table.names.remove(name_record)
-            elif name_record.nameID == 17:  # Typographic Subfamily name  
+            elif name_record.nameID == 17:  # Typographic Subfamily name
                 name_table.names.remove(name_record)
-        
+
         # 새로운 Typographic names 추가
         for platform_id, encoding_id, language_id in platforms:
             name_table.setName(font_name, 16, platform_id, encoding_id, language_id)
             name_table.setName("Regular", 17, platform_id, encoding_id, language_id)
-        
+
         # 한글 지원을 위한 추가 메타데이터 설정
         self._update_font_metadata_for_korean(font)
 
     def _update_font_metadata_for_korean(self, font):
         """
         VSCode에서 한글이 제대로 표시되도록 폰트 메타데이터 업데이트
-        
+
         Args:
             font: TTFont 객체
         """
         # OS/2 테이블 업데이트 (문자 집합 정보)
-        if 'OS/2' in font:
-            os2_table = font['OS/2']
-            
+        if "OS/2" in font:
+            os2_table = font["OS/2"]
+
             # Unicode Range 설정 (한글 지원 추가 - 기존 값 보존)
-            # Bit 28: Hangul Jamo (U+1100-U+11FF)  
+            # Bit 28: Hangul Jamo (U+1100-U+11FF)
             # Bit 29: Hangul Syllables (U+AC00-U+D7AF)
             # Bit 30: Hangul Compatibility Jamo (U+3130-U+318F)
-            if hasattr(os2_table, 'ulUnicodeRange1'):
+            if hasattr(os2_table, "ulUnicodeRange1"):
                 # 기존 값에 한글 범위만 추가 (OR 연산으로 기존 비트 보존)
                 korean_ranges = (1 << 28) | (1 << 29) | (1 << 30)
                 os2_table.ulUnicodeRange1 |= korean_ranges
-            
+
             # Unicode Range 2, 3, 4도 보존 (다른 언어 및 특수 문자 지원)
             # 이 값들을 건드리지 않아야 합자 등이 유지됨
-            
-            # Code Page Range 설정 (한국어 지원 추가 - 기존 값 보존)  
+
+            # Code Page Range 설정 (한국어 지원 추가 - 기존 값 보존)
             # Bit 19: Korean (Wansung) - 949
-            if hasattr(os2_table, 'ulCodePageRange1'):
-                os2_table.ulCodePageRange1 |= (1 << 19)
-            
+            if hasattr(os2_table, "ulCodePageRange1"):
+                os2_table.ulCodePageRange1 |= 1 << 19
+
             # Weight과 Width 설정 (VSCode 호환성)
-            if hasattr(os2_table, 'usWeightClass'):
+            if hasattr(os2_table, "usWeightClass"):
                 if os2_table.usWeightClass == 0:
                     os2_table.usWeightClass = 400  # Normal weight
-            
-            if hasattr(os2_table, 'usWidthClass'):
+
+            if hasattr(os2_table, "usWidthClass"):
                 if os2_table.usWidthClass == 0:
                     os2_table.usWidthClass = 5  # Medium width
-        
+
         # cmap 테이블 확인 및 보강
-        if 'cmap' in font:
-            cmap_table = font['cmap']
-            
+        if "cmap" in font:
+            cmap_table = font["cmap"]
+
             # Unicode BMP 서브테이블이 있는지 확인
             has_unicode_bmp = False
             for subtable in cmap_table.tables:
-                if (subtable.platformID == 3 and subtable.platEncID == 1) or \
-                   (subtable.platformID == 0 and subtable.platEncID == 3):
+                if (subtable.platformID == 3 and subtable.platEncID == 1) or (
+                    subtable.platformID == 0 and subtable.platEncID == 3
+                ):
                     has_unicode_bmp = True
                     break
-            
+
             # Unicode BMP 서브테이블이 없으면 경고 (하지만 기존 것을 유지)
             if not has_unicode_bmp:
-                print("경고: Unicode BMP cmap 서브테이블을 찾을 수 없습니다. 한글 표시에 문제가 있을 수 있습니다.")
-        
+                print(
+                    "경고: Unicode BMP cmap 서브테이블을 찾을 수 없습니다. 한글 표시에 문제가 있을 수 있습니다."
+                )
+
         # head 테이블 확인
-        if 'head' in font:
-            head_table = font['head']
+        if "head" in font:
+            head_table = font["head"]
             # macStyle 설정 (Regular 폰트로 표시)
-            if hasattr(head_table, 'macStyle'):
+            if hasattr(head_table, "macStyle"):
                 head_table.macStyle = 0  # Regular style
-        
+
         # 합자 지원 확인 및 디버그 정보
         self._verify_ligature_support(font)
 
     def _verify_ligature_support(self, font):
         """
         폰트의 합자 지원 여부를 확인하고 디버그 정보 출력
-        
+
         Args:
             font: TTFont 객체
         """
         print("=== 폰트 합자 지원 검증 ===")
-        
+
         # GSUB 테이블 확인 (합자의 핵심)
-        if 'GSUB' in font:
+        if "GSUB" in font:
             print("✓ GSUB 테이블 존재")
-            gsub_table = font['GSUB']
-            
+            gsub_table = font["GSUB"]
+
             # 피처 리스트 확인
-            if hasattr(gsub_table.table, 'FeatureList') and gsub_table.table.FeatureList:
+            if (
+                hasattr(gsub_table.table, "FeatureList")
+                and gsub_table.table.FeatureList
+            ):
                 feature_tags = []
                 for feature_record in gsub_table.table.FeatureList.FeatureRecord:
                     feature_tags.append(feature_record.FeatureTag)
-                
+
                 print(f"  피처 목록: {', '.join(feature_tags)}")
-                
+
                 # 일반적인 합자 피처 확인
-                ligature_features = ['liga', 'dlig', 'clig', 'rlig']
-                found_ligatures = [tag for tag in feature_tags if tag in ligature_features]
-                
+                ligature_features = ["liga", "dlig", "clig", "rlig"]
+                found_ligatures = [
+                    tag for tag in feature_tags if tag in ligature_features
+                ]
+
                 if found_ligatures:
                     print(f"✓ 합자 피처 발견: {', '.join(found_ligatures)}")
                 else:
@@ -461,167 +588,378 @@ class FontMerger:
                 print("⚠ GSUB 테이블에 FeatureList가 없습니다")
         else:
             print("⚠ GSUB 테이블이 없습니다 - 합자가 지원되지 않을 수 있습니다")
-        
+
         # GPOS 테이블 확인 (위치 조정)
-        if 'GPOS' in font:
+        if "GPOS" in font:
             print("✓ GPOS 테이블 존재")
         else:
             print("⚠ GPOS 테이블이 없습니다")
-        
+
         # cmap 테이블에서 일반적인 합자 글리프 확인
-        if 'cmap' in font:
+        if "cmap" in font:
             cmap = font.getBestCmap()
             if cmap:
                 # 일반적인 합자 문자들 확인
                 ligature_chars = [
                     0x2192,  # →
-                    0x21D2,  # ⇒  
+                    0x21D2,  # ⇒
                     0x2260,  # ≠
                     0x2264,  # ≤
                     0x2265,  # ≥
                 ]
-                
+
                 found_ligature_chars = []
                 for char_code in ligature_chars:
                     if char_code in cmap:
                         found_ligature_chars.append(f"U+{char_code:04X}")
-                
+
                 if found_ligature_chars:
-                    print(f"✓ 합자 관련 유니코드 문자 발견: {', '.join(found_ligature_chars)}")
-        
+                    print(
+                        f"✓ 합자 관련 유니코드 문자 발견: {', '.join(found_ligature_chars)}"
+                    )
+
         print("======================\n")
 
-    def _restore_ligature_support(self, merged_font, font1_path, font2_path):
+    def _restore_ligature_support(
+        self, merged_font, base_font_path, secondary_font_path
+    ):
         """
         병합된 폰트에서 합자 지원을 복원
-        
+
         Args:
             merged_font: 병합된 TTFont 객체
-            font1_path: 첫 번째 폰트 경로 (보통 영문 폰트)
-            font2_path: 두 번째 폰트 경로 (보통 한글 폰트)
+            font1_path: 첫 번째 폰트 경로 (기본 폰트)
+            font2_path: 두 번째 폰트 경로 (보조 폰트)
         """
         print("=== 합자 지원 복원 시작 ===")
-        
-        # 원본 영문 폰트에서 합자 정보 추출
-        font1 = TTFont(font1_path)
-        font2 = TTFont(font2_path)
-        
-        # 어느 폰트에 liga 피처가 있는지 확인
-        liga_source_font = None
-        liga_source_name = None
-        
-        for font, name in [(font1, "첫 번째 폰트"), (font2, "두 번째 폰트")]:
-            if 'GSUB' in font:
-                gsub_table = font['GSUB']
-                if hasattr(gsub_table.table, 'FeatureList') and gsub_table.table.FeatureList:
-                    for feature_record in gsub_table.table.FeatureList.FeatureRecord:
-                        if feature_record.FeatureTag == 'liga':
-                            liga_source_font = font
-                            liga_source_name = name
-                            print(f"✓ {name}에서 liga 피처 발견")
-                            break
-            if liga_source_font:
-                break
-        
-        if not liga_source_font:
-            print("⚠ liga 피처를 가진 원본 폰트를 찾을 수 없습니다")
-            return
-        
-        # 병합된 폰트의 GSUB 테이블 수정
-        if 'GSUB' not in merged_font:
-            print("⚠ 병합된 폰트에 GSUB 테이블이 없습니다")
-            return
-        
-        # liga 피처가 없는 경우 추가
-        merged_gsub = merged_font['GSUB']
-        source_gsub = liga_source_font['GSUB']
-        
-        if hasattr(merged_gsub.table, 'FeatureList') and merged_gsub.table.FeatureList:
-            # 기존 피처 목록에서 liga 확인
-            has_liga = False
-            for feature_record in merged_gsub.table.FeatureList.FeatureRecord:
-                if feature_record.FeatureTag == 'liga':
-                    has_liga = True
-                    break
-            
-            if not has_liga:
-                print("liga 피처가 누락됨 - 원본에서 복사 시도")
-                self._copy_liga_feature(merged_gsub, source_gsub)
+
+        # 원본 폰트들 로드
+        base_font = TTFont(base_font_path)
+        secondary_font = TTFont(secondary_font_path)
+
+        # 기본 폰트의 합자 기능 확인 (사용자 선택 우선)
+        base_ligature_score = self._calculate_ligature_score_from_font(base_font)
+        print(f"기본 폰트 합자 점수: {base_ligature_score}")
+
+        if base_ligature_score > 0:
+            # 기본 폰트에 합자가 있으면 그것을 사용
+            ligature_source = base_font
+            source_name = "기본 폰트"
+        else:
+            # 기본 폰트에 합자가 없으면 보조 폰트 확인
+            secondary_ligature_score = self._calculate_ligature_score_from_font(
+                secondary_font
+            )
+            print(f"보조 폰트 합자 점수: {secondary_ligature_score}")
+
+            if secondary_ligature_score > 0:
+                ligature_source = secondary_font
+                source_name = "보조 폰트"
             else:
-                print("✓ liga 피처가 이미 존재함")
-        
-        # 피처 중복 제거
-        self._deduplicate_features(merged_gsub)
-        
+                ligature_source = None
+                source_name = None
+
+        if not ligature_source:
+            print("⚠ 합자 기능을 가진 폰트를 찾을 수 없습니다")
+            return
+
+        print(f"✓ {source_name}의 합자 기능을 사용합니다")
+
+        # 병합된 폰트의 OpenType 테이블 강화
+        self._preserve_ligature_features(merged_font, ligature_source)
+
         print("=== 합자 지원 복원 완료 ===\n")
 
-    def _copy_liga_feature(self, target_gsub, source_gsub):
+    def _calculate_ligature_score_from_font(self, font):
+        """TTFont 객체에서 직접 합자 점수 계산"""
+        score = 0
+
+        try:
+            if "GSUB" in font:
+                gsub_table = font["GSUB"]
+                if (
+                    hasattr(gsub_table.table, "FeatureList")
+                    and gsub_table.table.FeatureList
+                ):
+                    ligature_features = ["liga", "dlig", "clig", "rlig", "hlig"]
+                    for feature_record in gsub_table.table.FeatureList.FeatureRecord:
+                        if feature_record.FeatureTag in ligature_features:
+                            score += 10
+
+            if "GPOS" in font:
+                score += 5
+
+        except Exception:
+            pass
+
+        return score
+
+    def _preserve_ligature_features(self, merged_font, source_font):
+        """소스 폰트의 합자 기능을 병합된 폰트에 보존"""
+        try:
+            # GSUB 테이블 보존
+            if "GSUB" in source_font:
+                if "GSUB" not in merged_font:
+                    merged_font["GSUB"] = source_font["GSUB"]
+                    print("✓ GSUB 테이블 전체 복사")
+                else:
+                    self._merge_ligature_features(
+                        merged_font["GSUB"], source_font["GSUB"]
+                    )
+
+            # GPOS 테이블 보존
+            if "GPOS" in source_font:
+                if "GPOS" not in merged_font:
+                    merged_font["GPOS"] = source_font["GPOS"]
+                    print("✓ GPOS 테이블 전체 복사")
+
+        except Exception as e:
+            print(f"⚠ 합자 기능 보존 중 오류: {str(e)}")
+
+    def _merge_ligature_features(self, target_gsub, source_gsub):
+        """합자 관련 피처들을 우선적으로 병합"""
+        try:
+            if not (
+                hasattr(source_gsub.table, "FeatureList")
+                and source_gsub.table.FeatureList
+            ):
+                return
+
+            if not (
+                hasattr(target_gsub.table, "FeatureList")
+                and target_gsub.table.FeatureList
+            ):
+                target_gsub.table.FeatureList = source_gsub.table.FeatureList
+                print("✓ FeatureList 전체 복사")
+                return
+
+            # 합자 관련 피처들만 추가
+            ligature_features = ["liga", "dlig", "clig", "rlig", "hlig", "calt"]
+            existing_features = {
+                fr.FeatureTag for fr in target_gsub.table.FeatureList.FeatureRecord
+            }
+
+            source_features = source_gsub.table.FeatureList
+            added_count = 0
+
+            for i, feature_record in enumerate(source_features.FeatureRecord):
+                if (
+                    feature_record.FeatureTag in ligature_features
+                    and feature_record.FeatureTag not in existing_features
+                ):
+                    target_gsub.table.FeatureList.FeatureRecord.append(feature_record)
+                    target_gsub.table.FeatureList.Feature.append(
+                        source_features.Feature[i]
+                    )
+                    added_count += 1
+                    print(f"✓ {feature_record.FeatureTag} 피처 추가")
+
+            if added_count > 0:
+                target_gsub.table.FeatureList.FeatureCount = len(
+                    target_gsub.table.FeatureList.FeatureRecord
+                )
+                print(f"✓ {added_count}개의 합자 피처를 추가했습니다")
+            else:
+                print("✓ 모든 합자 피처가 이미 존재합니다")
+
+        except Exception as e:
+            print(f"⚠ 합자 피처 병합 중 오류: {str(e)}")
+
+    def _find_best_ligature_source(self, font1, font2):
         """
-        원본 폰트에서 liga 피처를 대상 폰트로 복사
+        두 폰트 중 합자 기능이 더 풍부한 폰트 찾기
+
+        Returns:
+            tuple: (font, name, features) 또는 None
+        """
+        candidates = [(font1, "기본 폰트 (첫 번째)"), (font2, "보조 폰트 (두 번째)")]
+
+        best_candidate = None
+        best_score = 0
+
+        for font, name in candidates:
+            if "GSUB" not in font:
+                continue
+
+            gsub_table = font["GSUB"]
+            if not (
+                hasattr(gsub_table.table, "FeatureList")
+                and gsub_table.table.FeatureList
+            ):
+                continue
+
+            # 합자 관련 피처들 찾기
+            ligature_features = []
+            feature_score = 0
+
+            for feature_record in gsub_table.table.FeatureList.FeatureRecord:
+                feature_tag = feature_record.FeatureTag
+
+                # 합자 관련 피처들과 점수
+                if feature_tag == "liga":  # Standard Ligatures
+                    ligature_features.append(feature_tag)
+                    feature_score += 10
+                elif feature_tag == "dlig":  # Discretionary Ligatures
+                    ligature_features.append(feature_tag)
+                    feature_score += 5
+                elif feature_tag == "clig":  # Contextual Ligatures
+                    ligature_features.append(feature_tag)
+                    feature_score += 5
+                elif feature_tag == "rlig":  # Required Ligatures
+                    ligature_features.append(feature_tag)
+                    feature_score += 3
+                elif feature_tag in ["calt", "curs", "kern"]:  # 관련 피처들
+                    ligature_features.append(feature_tag)
+                    feature_score += 1
+
+            if feature_score > best_score:
+                best_score = feature_score
+                best_candidate = (font, name, ligature_features)
+
+        return best_candidate
+
+    def _enhance_opentype_features(self, merged_font, source_font, source_features):
+        """
+        원본 폰트의 OpenType 기능을 병합된 폰트에 강화/복원
+        """
+        if "GSUB" not in source_font or "GSUB" not in merged_font:
+            print("⚠ GSUB 테이블이 없어서 OpenType 기능을 복원할 수 없습니다")
+            return
+
+        source_gsub = source_font["GSUB"]
+        merged_gsub = merged_font["GSUB"]
+
+        try:
+            # 병합된 폰트에 누락된 중요한 피처들 복사
+            self._copy_missing_features(merged_gsub, source_gsub, source_features)
+
+            # GPOS 테이블도 복사 (위치 조정)
+            if "GPOS" in source_font and "GPOS" not in merged_font:
+                print("✓ GPOS 테이블 복사 중...")
+                merged_font["GPOS"] = source_font["GPOS"]
+            elif "GPOS" in source_font and "GPOS" in merged_font:
+                print("✓ GPOS 테이블 기능 강화 중...")
+                self._enhance_gpos_features(merged_font["GPOS"], source_font["GPOS"])
+
+        except Exception as e:
+            print(f"⚠ OpenType 기능 강화 중 오류: {str(e)}")
+            # 실패해도 기본 병합은 유지
+
+    def _copy_missing_features(self, target_gsub, source_gsub, important_features):
+        """
+        중요한 피처들을 원본에서 대상으로 복사
+        """
+        if not (
+            hasattr(source_gsub.table, "FeatureList") and source_gsub.table.FeatureList
+        ):
+            return
+
+        if not (
+            hasattr(target_gsub.table, "FeatureList") and target_gsub.table.FeatureList
+        ):
+            return
+
+        # 대상 폰트의 기존 피처 태그들
+        existing_features = {
+            record.FeatureTag for record in target_gsub.table.FeatureList.FeatureRecord
+        }
+
+        # 원본에서 누락된 중요 피처들 찾기
+        missing_features = []
+        for i, feature_record in enumerate(source_gsub.table.FeatureList.FeatureRecord):
+            if (
+                feature_record.FeatureTag in important_features
+                and feature_record.FeatureTag not in existing_features
+            ):
+                missing_features.append(
+                    (i, feature_record, source_gsub.table.FeatureList.Feature[i])
+                )
+
+        if not missing_features:
+            print("✓ 모든 중요 피처가 이미 존재합니다")
+            return
+
+        # 누락된 피처들 추가
+        feature_list = target_gsub.table.FeatureList
+
+        for _, feature_record, feature in missing_features:
+            try:
+                # 새로운 FeatureRecord 생성
+                from fontTools.ttLib.tables.otTables import FeatureRecord
+
+                new_record = FeatureRecord()
+                new_record.FeatureTag = feature_record.FeatureTag
+
+                # 피처 추가
+                feature_list.FeatureRecord.append(new_record)
+                feature_list.Feature.append(feature)
+
+                print(f"✓ '{feature_record.FeatureTag}' 피처를 추가했습니다")
+
+            except Exception as e:
+                print(f"⚠ '{feature_record.FeatureTag}' 피처 추가 실패: {str(e)}")
+
+        # 개수 업데이트
+        feature_list.FeatureCount = len(feature_list.FeatureRecord)
+
+        # 중복 제거
+        self._deduplicate_features(target_gsub)
+
+    def _enhance_gpos_features(self, target_gpos, source_gpos):
+        """
+        GPOS 테이블의 기능을 강화 (위치 조정, 커닝 등)
         """
         try:
-            if not (hasattr(source_gsub.table, 'FeatureList') and source_gsub.table.FeatureList):
-                return
-            
-            # 원본에서 liga 피처 찾기
-            liga_feature = None
-            liga_index = None
-            
-            for i, feature_record in enumerate(source_gsub.table.FeatureList.FeatureRecord):
-                if feature_record.FeatureTag == 'liga':
-                    liga_feature = source_gsub.table.FeatureList.Feature[i]
-                    liga_index = i
-                    break
-            
-            if liga_feature and hasattr(target_gsub.table, 'FeatureList'):
-                # 대상 폰트에 liga 피처 추가
-                from fontTools.otlLib.builder import Builder
-                from fontTools.feaLib.builder import addOpenTypeFeatures
-                
-                # 간단한 방법: liga 피처 레코드만 추가
-                target_feature_list = target_gsub.table.FeatureList
-                
-                # FeatureRecord 추가
-                from fontTools.ttLib.tables.otTables import FeatureRecord
-                new_feature_record = FeatureRecord()
-                new_feature_record.FeatureTag = 'liga'
-                
-                # Feature 리스트에 추가
-                target_feature_list.FeatureRecord.append(new_feature_record)
-                target_feature_list.Feature.append(liga_feature)
-                target_feature_list.FeatureCount += 1
-                
-                print("✓ liga 피처를 성공적으로 추가했습니다")
-                
+            # 간단한 전략: 원본의 더 풍부한 기능이 있으면 우선
+            if (
+                hasattr(source_gpos.table, "FeatureList")
+                and source_gpos.table.FeatureList
+                and hasattr(target_gpos.table, "FeatureList")
+            ):
+                source_feature_count = len(source_gpos.table.FeatureList.FeatureRecord)
+                target_feature_count = len(target_gpos.table.FeatureList.FeatureRecord)
+
+                if source_feature_count > target_feature_count:
+                    print(
+                        f"✓ GPOS 기능을 원본으로 교체 ({target_feature_count} -> {source_feature_count} 피처)"
+                    )
+                    target_gpos.table = source_gpos.table
+                else:
+                    print(f"✓ 기존 GPOS 기능 유지 ({target_feature_count} 피처)")
+
         except Exception as e:
-            print(f"⚠ liga 피처 복사 중 오류: {str(e)}")
+            print(f"⚠ GPOS 강화 중 오류: {str(e)}")
 
     def _deduplicate_features(self, gsub_table):
         """
         GSUB 테이블에서 중복된 피처 제거
         """
-        if not (hasattr(gsub_table.table, 'FeatureList') and gsub_table.table.FeatureList):
+        if not (
+            hasattr(gsub_table.table, "FeatureList") and gsub_table.table.FeatureList
+        ):
             return
-        
+
         feature_list = gsub_table.table.FeatureList
         seen_features = set()
         new_feature_records = []
         new_features = []
-        
+
         print("피처 중복 제거 시작...")
         original_count = len(feature_list.FeatureRecord)
-        
+
         for i, feature_record in enumerate(feature_list.FeatureRecord):
             feature_tag = feature_record.FeatureTag
             if feature_tag not in seen_features:
                 seen_features.add(feature_tag)
                 new_feature_records.append(feature_record)
                 new_features.append(feature_list.Feature[i])
-        
+
         # 업데이트
         feature_list.FeatureRecord = new_feature_records
         feature_list.Feature = new_features
         feature_list.FeatureCount = len(new_feature_records)
-        
+
         removed_count = original_count - len(new_feature_records)
-        print(f"✓ {removed_count}개의 중복 피처를 제거했습니다 ({original_count} -> {len(new_feature_records)})")
+        print(
+            f"✓ {removed_count}개의 중복 피처를 제거했습니다 ({original_count} -> {len(new_feature_records)})"
+        )

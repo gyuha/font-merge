@@ -108,9 +108,8 @@ class FontInfo(QWidget):
                 os2_table = font["OS/2"]
 
                 # 타이포그래피 어센더/디센더
-                if (
-                    hasattr(os2_table, "sTypoAscender")
-                    and hasattr(os2_table, "sTypoDescender")
+                if hasattr(os2_table, "sTypoAscender") and hasattr(
+                    os2_table, "sTypoDescender"
                 ):
                     ascender = os2_table.sTypoAscender
                     descender = os2_table.sTypoDescender
@@ -257,4 +256,3 @@ class FontInfo(QWidget):
         self.char_count_label.setText("문자 개수: -")
         self.warning_label.setText("")
         self._current_font_path = None
-

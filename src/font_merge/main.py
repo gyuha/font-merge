@@ -185,12 +185,26 @@ class FontMergeApp(QMainWindow):
                     if custom_name:
                         font_name = custom_name
 
+                # 기본 폰트 설정에 따라 순서 결정 (사용자 선택 존중)
+                if self.left_font.is_base_font():
+                    base_font_path = self.left_font.get_font_path()
+                    base_charsets = left_charsets
+                    secondary_font_path = self.right_font.get_font_path()
+                    secondary_charsets = right_charsets
+                    print("✓ 왼쪽 폰트를 기본 폰트로 사용합니다 (합자 포함)")
+                else:
+                    base_font_path = self.right_font.get_font_path()
+                    base_charsets = right_charsets
+                    secondary_font_path = self.left_font.get_font_path()
+                    secondary_charsets = left_charsets
+                    print("✓ 오른쪽 폰트를 기본 폰트로 사용합니다 (합자 포함)")
+
                 # 폰트 병합 실행
                 success = merger.merge_fonts(
-                    self.left_font.get_font_path(),
-                    left_charsets,
-                    self.right_font.get_font_path(),
-                    right_charsets,
+                    base_font_path,
+                    base_charsets,
+                    secondary_font_path,
+                    secondary_charsets,
                     save_path,
                     merge_option,
                     font_name,
